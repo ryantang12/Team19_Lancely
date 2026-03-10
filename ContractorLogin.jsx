@@ -52,6 +52,92 @@
             </button>
           </div>
         </div>
+{!showForgotPassword ? (
+      // Login Form
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+              placeholder="••••••••"
+            />
+            <button
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-3"
+            >
+              {showPassword ? <EyeOff className="h-5 w-5 text-gray-400" /> : <Eye className="h-5 w-5 text-gray-400" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="flex items-center text-sm text-gray-600">
+            <input type="checkbox" className="mr-2" />
+            Remember me
+          </label>
+          <button
+            onClick={() => setShowForgotPassword(true)}
+            className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+          >
+            Forgot password?
+          </button>
+        </div>
+
+        <button
+          onClick={handleLogin}
+          className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700"
+        >
+          Sign In
+        </button>
+      </div>
+    ) : (
+      
+      // Forgot Password
+      <div className="space-y-6">
+        <button
+          onClick={() => setShowForgotPassword(false)}
+          className="text-sm text-gray-600 hover:text-gray-800"
+        >
+          ← Back to login
+        </button>
+
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Reset Password</h2>
+          <p className="text-gray-600 mb-4">Enter your email to get a reset link</p>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <button
+          onClick={handleForgotPassword}
+          className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700"
+        >
+          Send Reset Link
+        </button>
+      </div>
+    )}
+  </div>
+</div>
 
         {/* Remember Me */}
         <div className="flex items-center">
