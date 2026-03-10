@@ -177,6 +177,13 @@
       </div>
     </div>
 
+<p className="text-center text-sm text-gray-600">
+  Looking to post jobs?{' '}
+  <a href="/" className="text-indigo-600 hover:text-indigo-700 font-medium">
+    Client Login
+  </a>
+</p>
+
     {/* Footer */}
     <p className="text-center text-sm text-gray-600 mt-6">
       © 2024 Lancely. All rights reserved.
