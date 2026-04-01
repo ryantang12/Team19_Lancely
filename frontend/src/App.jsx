@@ -1,16 +1,16 @@
 // ============================================================================
 // FILE: frontend/src/App.jsx
-// COMPLETE SIMPLE FRONTEND - FIXED VERSION (No Duplicates)
+// LANCELY FRONTEND - with Chat Feature
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
-const API_URL = 'http://localhost:5001/api';  // Changed to 5001 for Mac
+const API_URL = 'http://localhost:5001/api';
 
 // Helper to make API calls
 const api = {
@@ -26,7 +26,7 @@ const api = {
     });
     return response.json();
   },
-  
+
   get: async (url) => {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_URL}${url}`, {
@@ -49,6 +49,11 @@ function App() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [categories, setCategories] = useState([]);
 
+  // ── NEW: chat state ──────────────────────────────────────────────
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedChat, setSelectedChat] = useState(null); // { job, receiverId }
+  // ────────────────────────────────────────────────────────────────
+
   // Load on startup
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -57,11 +62,28 @@ function App() {
         if (data.user) setUser(data.user);
       }).catch(() => localStorage.removeItem('token'));
     }
-    
+
     api.get('/categories').then(data => {
       setCategories(data.categories || []);
     });
   }, []);
+
+  // ── NEW: poll unread count every 5 seconds when logged in ────────
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+    const fetchUnread = () => {
+      api.get('/messages/unread').then(data => {
+        setUnreadCount(data.count || 0);
+      }).catch(() => {});
+    };
+    fetchUnread(); // run immediately on login
+    const interval = setInterval(fetchUnread, 5000);
+    return () => clearInterval(interval); // cleanup on logout
+  }, [user]);
+  // ────────────────────────────────────────────────────────────────
 
   const showHome = () => setView('home');
   const showRegister = () => setView('register');
@@ -76,6 +98,15 @@ function App() {
     setView('jobDetail');
   };
 
+  // ── NEW: open chat for a specific job ───────────────────────────
+  const openChat = (job, receiverId) => {
+    setSelectedChat({ job, receiverId });
+    setView('chat');
+  };
+
+  const showMessages = () => setView('messages');
+  // ────────────────────────────────────────────────────────────────
+
   const loadJobs = async () => {
     const data = await api.get('/jobs');
     setJobs(data.jobs || []);
@@ -84,6 +115,7 @@ function App() {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
+    setUnreadCount(0);
     setView('home');
   };
 
@@ -91,12 +123,24 @@ function App() {
     <div className="App">
       {/* NAVIGATION */}
       <nav className="navbar">
-        <h1 onClick={showHome} style={{cursor: 'pointer'}}>🔧 LANCELY</h1>
+        <h1 onClick={showHome} style={{ cursor: 'pointer' }}>🔧 LANCELY</h1>
         <div>
           <button onClick={showJobs}>Browse Jobs</button>
           {user ? (
             <>
               <span>Hello, {user.username}!</span>
+
+              {/* ── NEW: Messages button with unread badge ── */}
+              <button onClick={showMessages} className="msg-btn">
+                💬 Messages
+                {unreadCount > 0 && (
+                  <span className="unread-badge">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {/* ─────────────────────────────────────────── */}
+
               {user.user_type === 'client' && (
                 <button onClick={showJobForm}>Post a Job</button>
               )}
@@ -118,7 +162,27 @@ function App() {
         {view === 'login' && <LoginPage setUser={setUser} setView={setView} />}
         {view === 'jobs' && <JobsPage jobs={jobs} showJobDetail={showJobDetail} />}
         {view === 'jobForm' && <JobFormPage categories={categories} setView={setView} loadJobs={loadJobs} />}
-        {view === 'jobDetail' && <JobDetailPage job={selectedJob} user={user} />}
+        {view === 'jobDetail' && (
+          <JobDetailPage
+            job={selectedJob}
+            user={user}
+            openChat={openChat}   // NEW prop
+          />
+        )}
+        {/* ── NEW views ── */}
+        {view === 'messages' && (
+          <MessagesPage user={user} openChat={openChat} />
+        )}
+        {view === 'chat' && selectedChat && (
+          <ChatWindow
+            job={selectedChat.job}
+            receiverId={selectedChat.receiverId}
+            user={user}
+            setUnreadCount={setUnreadCount}
+            goBack={() => setView('messages')}
+          />
+        )}
+        {/* ─────────────── */}
       </div>
     </div>
   );
@@ -177,7 +241,7 @@ function RegisterPage({ setUser, setView }) {
     <div className="form-page">
       <h2>Create Account</h2>
       {error && <div className="error">{error}</div>}
-      
+
       <form onSubmit={handleSubmit}>
         <label>I am a:</label>
         <select name="user_type" value={formData.user_type} onChange={handleChange}>
@@ -202,19 +266,19 @@ function RegisterPage({ setUser, setView }) {
         />
 
         <input
-          type="email"
-          name="email"
-          placeholder="Email *"
-          value={formData.email}
+          type="text"
+          name="username"
+          placeholder="Username"
+          value={formData.username}
           onChange={handleChange}
           required
         />
 
         <input
-          type="text"
-          name="username"
-          placeholder="Username *"
-          value={formData.username}
+          type="email"
+          name="email"
+          placeholder="Email"
+          value={formData.email}
           onChange={handleChange}
           required
         />
@@ -222,13 +286,13 @@ function RegisterPage({ setUser, setView }) {
         <input
           type="password"
           name="password"
-          placeholder="Password *"
+          placeholder="Password"
           value={formData.password}
           onChange={handleChange}
           required
         />
 
-        <button type="submit">Register</button>
+        <button type="submit">Create Account</button>
       </form>
     </div>
   );
@@ -262,7 +326,7 @@ function LoginPage({ setUser, setView }) {
     <div className="form-page">
       <h2>Login</h2>
       {error && <div className="error">{error}</div>}
-      
+
       <form onSubmit={handleSubmit}>
         <input
           type="email"
@@ -285,37 +349,35 @@ function LoginPage({ setUser, setView }) {
 }
 
 // ============================================================================
-// JOB LIST PAGE
+// JOBS PAGE
 // ============================================================================
 
 function JobsPage({ jobs, showJobDetail }) {
   return (
     <div>
-      <h2>Available Jobs ({jobs.length})</h2>
-      
-      {jobs.length === 0 ? (
-        <p>No jobs yet. Be the first to post!</p>
-      ) : (
-        <div className="job-grid">
-          {jobs.map(job => (
-            <div key={job.id} className="job-card" onClick={() => showJobDetail(job)}>
-              {job.is_urgent && <span className="urgent-badge">🔥 URGENT</span>}
-              <h3>{job.title}</h3>
-              <p>{job.description.substring(0, 100)}...</p>
-              {job.category && (
-                <span className="category-badge">
-                  {job.category.icon} {job.category.name}
-                </span>
-              )}
-              <div className="job-footer">
-                <span className="budget">${job.budget_amount}</span>
-                <span>{job.location_city}, {job.location_state}</span>
-              </div>
-              <small>Posted by {job.client.username} • {job.proposal_count} proposals</small>
-            </div>
-          ))}
+      <h2>Available Jobs</h2>
+      {jobs.length === 0 && <p>No jobs posted yet.</p>}
+      {jobs.map(job => (
+        <div
+          key={job.id}
+          className="job-card"
+          onClick={() => showJobDetail(job)}
+        >
+          <div className="job-header">
+            <h3>{job.title}</h3>
+            {job.is_urgent && <span className="badge urgent">🔥 URGENT</span>}
+          </div>
+          <p>{job.description.substring(0, 100)}...</p>
+          <div className="job-footer">
+            <span className="budget">${job.budget_amount}</span>
+            <span>{job.location_city}, {job.location_state}</span>
+          </div>
+          <div className="job-meta">
+            <small>📋 {job.proposal_count} proposals</small>
+            <small>👁 {job.views_count} views</small>
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -371,7 +433,7 @@ function JobFormPage({ categories, setView, loadJobs }) {
     <div className="form-page">
       <h2>Post a New Job</h2>
       {error && <div className="error">{error}</div>}
-      
+
       <form onSubmit={handleSubmit}>
         <label>Job Title *</label>
         <input
@@ -468,10 +530,10 @@ function JobFormPage({ categories, setView, loadJobs }) {
 }
 
 // ============================================================================
-// JOB DETAIL PAGE
+// JOB DETAIL PAGE  (updated to include "Open Chat" button)
 // ============================================================================
 
-function JobDetailPage({ job, user }) {
+function JobDetailPage({ job, user, openChat }) {
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [coverLetter, setCoverLetter] = useState('');
@@ -515,9 +577,13 @@ function JobDetailPage({ job, user }) {
     const result = await api.post(`/proposals/${proposalId}/accept`, {});
 
     if (result.message) {
-      alert('Proposal accepted!');
+      alert('Proposal accepted! You can now chat with the contractor.');
       api.get(`/proposals/${job.id}`).then(data => {
         setProposals(data.proposals || []);
+      });
+      // Refresh job so assigned_freelancer_id is up to date
+      api.get(`/jobs/${job.id}`).then(data => {
+        if (data.job) Object.assign(job, data.job);
       });
     }
   };
@@ -526,6 +592,17 @@ function JobDetailPage({ job, user }) {
 
   const isOwner = user && user.id === job.client.id;
   const isFreelancer = user && user.user_type === 'freelancer';
+
+  // ── NEW: determine if user can chat ─────────────────────────────
+  const isAssignedFreelancer =
+    user && job.assigned_freelancer_id && user.id === job.assigned_freelancer_id;
+  const canChat = isOwner && job.assigned_freelancer_id;
+
+  // Work out who to message: client messages the freelancer, freelancer messages the client
+  const chatReceiverId = isOwner
+    ? job.assigned_freelancer_id
+    : job.client.id;
+  // ────────────────────────────────────────────────────────────────
 
   return (
     <div className="job-detail">
@@ -560,6 +637,19 @@ function JobDetailPage({ job, user }) {
       <div className="detail-section">
         <small>Views: {job.views_count} | Proposals: {job.proposal_count}</small>
       </div>
+
+      {/* ── NEW: Chat button — visible to client (after hiring) and assigned freelancer ── */}
+      {(canChat || isAssignedFreelancer) && (
+        <div className="detail-section">
+          <button
+            className="chat-btn"
+            onClick={() => openChat(job, chatReceiverId)}
+          >
+            💬 Open Chat
+          </button>
+        </div>
+      )}
+      {/* ──────────────────────────────────────────────────────────────────────────────── */}
 
       {/* PROPOSAL FORM FOR FREELANCERS */}
       {isFreelancer && !isOwner && job.status === 'open' && (
@@ -613,6 +703,253 @@ function JobDetailPage({ job, user }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// NEW: MESSAGES PAGE  (list of conversations)
+// ============================================================================
+
+function MessagesPage({ user, openChat }) {
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    api.get('/conversations').then(data => {
+      setConversations(data.conversations || []);
+      setLoading(false);
+    });
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="form-page">
+        <p>Please log in to view your messages.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <div className="form-page"><p>Loading conversations...</p></div>;
+
+  return (
+    <div className="messages-page">
+      <h2>💬 Messages</h2>
+
+      {conversations.length === 0 && (
+        <div className="empty-state">
+          <p>No conversations yet.</p>
+          <p>
+            <small>
+              Chat becomes available after a client accepts a contractor's proposal.
+            </small>
+          </p>
+        </div>
+      )}
+
+      {conversations.map(conv => (
+        <div
+          key={conv.job_id}
+          className={`conversation-card ${conv.unread_count > 0 ? 'has-unread' : ''}`}
+          onClick={() => {
+            // Build a minimal job object that ChatWindow needs
+            const jobObj = {
+              id: conv.job_id,
+              title: conv.job_title,
+              client: { id: conv.client_id },
+              assigned_freelancer_id: conv.assigned_freelancer_id
+            };
+            const receiverId = user.id === conv.client_id
+              ? conv.assigned_freelancer_id
+              : conv.client_id;
+            openChat(jobObj, receiverId);
+          }}
+        >
+          <div className="conv-header">
+            <span className="conv-title">{conv.job_title}</span>
+            {conv.unread_count > 0 && (
+              <span className="unread-badge">{conv.unread_count}</span>
+            )}
+          </div>
+          <div className="conv-meta">
+            <span className="conv-other">with @{conv.other_user?.username}</span>
+            {conv.last_message_at && (
+              <span className="conv-time">
+                {new Date(conv.last_message_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          {conv.last_message && (
+            <p className="conv-preview">{conv.last_message}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// NEW: CHAT WINDOW  (the actual messaging interface)
+// ============================================================================
+
+function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef(null);
+
+  // Load messages and mark them as read
+  const loadMessages = () => {
+    api.get(`/messages/${job.id}`).then(data => {
+      setMessages(data.messages || []);
+    }).catch(() => {});
+  };
+
+  const markRead = () => {
+    api.post('/messages/read', { job_id: job.id }).then(() => {
+      // Refresh the global unread count after marking read
+      api.get('/messages/unread').then(data => {
+        setUnreadCount(data.count || 0);
+      });
+    }).catch(() => {});
+  };
+
+  // Load on mount, then poll every 5 seconds
+  useEffect(() => {
+    loadMessages();
+    markRead();
+    const interval = setInterval(() => {
+      loadMessages();
+      markRead();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [job.id]);
+
+  // Auto-scroll to newest message
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+
+    setSending(true);
+    const result = await api.post('/messages', {
+      job_id: job.id,
+      receiver_id: receiverId,
+      content: trimmed
+    });
+
+    if (result.error) {
+      alert(result.error);
+    } else {
+      setText('');
+      loadMessages();
+    }
+    setSending(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // Format timestamp nicely
+  const formatTime = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  // Group messages by date to show date separators
+  const groupedMessages = messages.reduce((groups, msg) => {
+    const date = formatDate(msg.created_at);
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(msg);
+    return groups;
+  }, {});
+
+  return (
+    <div className="chat-page">
+      {/* Header */}
+      <div className="chat-header">
+        <button className="back-btn" onClick={goBack}>← Back</button>
+        <div className="chat-title">
+          <span>💬 {job.title}</span>
+        </div>
+      </div>
+
+      {/* Messages area */}
+      <div className="chat-messages">
+        {messages.length === 0 && (
+          <div className="chat-empty">
+            <p>No messages yet.</p>
+            <p><small>Send the first message to get started!</small></p>
+          </div>
+        )}
+
+        {Object.entries(groupedMessages).map(([date, msgs]) => (
+          <div key={date}>
+            {/* Date separator */}
+            <div className="date-separator">
+              <span>{date}</span>
+            </div>
+
+            {msgs.map(msg => {
+              const isMe = msg.sender_id === user.id;
+              return (
+                <div
+                  key={msg.id}
+                  className={`message-row ${isMe ? 'me' : 'them'}`}
+                >
+                  {/* Show sender name for their messages */}
+                  {!isMe && (
+                    <div className="msg-sender">{msg.sender_username}</div>
+                  )}
+                  <div className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-them'}`}>
+                    {msg.content}
+                  </div>
+                  <div className={`msg-time ${isMe ? 'time-me' : 'time-them'}`}>
+                    {formatTime(msg.created_at)}
+                    {/* Show read receipt for sent messages */}
+                    {isMe && <span className="read-receipt">{msg.is_read ? ' ✓✓' : ' ✓'}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+
+        {/* Invisible div to scroll to */}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="chat-input-area">
+        <textarea
+          className="chat-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+          rows={2}
+        />
+        <button
+          className="send-btn"
+          onClick={handleSend}
+          disabled={!text.trim() || sending}
+        >
+          {sending ? '...' : '➤'}
+        </button>
+      </div>
     </div>
   );
 }
