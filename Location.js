@@ -1,7 +1,4 @@
-// ============================================================================
-// FILE: static/location.js
-// Location tracking that works with your existing Contractor API
-// ============================================================================
+// Location tracking (frontend)
 
 class LocationService {
     constructor() {
@@ -10,10 +7,9 @@ class LocationService {
         this.currentContractorId = null;
     }
     
-    /**
-     * Request location permission from user
-     * @returns {Promise} Resolves with location data
-     */
+    
+     //Request location permission from user
+     
     async requestPermission() {
         return new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
