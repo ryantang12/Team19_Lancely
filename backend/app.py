@@ -1019,6 +1019,11 @@ if __name__ == '__main__':
     print("  GET    /api/messages/unread   - unread count (badge)")
     print("  POST   /api/messages/read     - mark as read")
     print("  GET    /api/conversations     - list conversations")
+    print("Review endpoints:")
+    print("  POST   /api/reviews           - create review")
+    print("  GET    /api/reviews/user/<id> - get user's reviews")
+    print("  GET    /api/reviews/job/<id>  - get job's reviews")
+    print("  GET    /api/reviews/pending   - pending reviews to write")
     print("=" * 60)
 
     # Run Flask app
