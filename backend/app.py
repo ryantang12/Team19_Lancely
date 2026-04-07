@@ -686,6 +686,229 @@ def mark_messages_read():
     return jsonify({'message': 'Messages marked as read'}), 200
 
 
+# REVIEW ROUTES
+
+
+@app.route('/api/reviews', methods=['POST'])
+def create_review():
+    """
+    Create a review for a completed job - SAVES TO DATABASE
+    
+    Both clients and freelancers can leave reviews for each other.
+    Body: { job_id, reviewee_id, rating, comment, image_url (optional) }
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    data = request.json
+    
+    # Validate required fields
+    if not all(k in data for k in ['job_id', 'reviewee_id', 'rating', 'comment']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    job_id = data['job_id']
+    reviewee_id = data['reviewee_id']
+    rating = data['rating']
+    comment = data['comment']
+    image_url = data.get('image_url', '')
+    
+    # Validate rating is 1-5
+    if rating not in [1, 2, 3, 4, 5]:
+        return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+    
+    # Check if job exists
+    job = Job.query.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    # Only allow reviews if job is completed
+    if job.status != 'completed':
+        return jsonify({'error': 'Can only review completed jobs'}), 400
+    
+    # Verify the user is part of this job
+    is_client = job.client_id == user.id
+    is_freelancer = job.assigned_freelancer_id == user.id
+    
+    if not is_client and not is_freelancer:
+        return jsonify({'error': 'You are not a participant in this job'}), 403
+    
+    # Check if review already exists
+    existing_review = Review.query.filter_by(
+        job_id=job_id,
+        reviewer_id=user.id,
+        reviewee_id=reviewee_id
+    ).first()
+    
+    if existing_review:
+        return jsonify({'error': 'You have already reviewed this person for this job'}), 400
+    
+    # Create the review
+    review = Review(
+        job_id=job_id,
+        reviewer_id=user.id,
+        reviewee_id=reviewee_id,
+        rating=rating,
+        comment=comment.strip(),
+        image_url=image_url.strip() if image_url else None
+    )
+    
+    db.session.add(review)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Review created successfully',
+        'review_id': review.id
+    }), 201
+
+
+@app.route('/api/reviews/user/<int:user_id>', methods=['GET'])
+def get_user_reviews(user_id):
+    """
+    Get all reviews for a specific user - QUERIES DATABASE
+    
+    Returns all reviews where the user is the reviewee,
+    along with average rating and total count.
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get all reviews for this user
+    reviews = Review.query.filter_by(reviewee_id=user_id)\
+        .order_by(Review.created_at.desc()).all()
+    
+    # Calculate average rating
+    total_rating = sum(r.rating for r in reviews)
+    avg_rating = total_rating / len(reviews) if reviews else 0
+    
+    return jsonify({
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'user_type': user.user_type
+        },
+        'average_rating': round(avg_rating, 1),
+        'total_reviews': len(reviews),
+        'reviews': [{
+            'id': r.id,
+            'rating': r.rating,
+            'comment': r.comment,
+            'image_url': r.image_url,
+            'created_at': r.created_at.isoformat(),
+            'job': {
+                'id': r.job.id,
+                'title': r.job.title
+            },
+            'reviewer': {
+                'id': r.reviewer.id,
+                'username': r.reviewer.username,
+                'first_name': r.reviewer.first_name,
+                'last_name': r.reviewer.last_name
+            }
+        } for r in reviews]
+    }), 200
+
+
+@app.route('/api/reviews/job/<int:job_id>', methods=['GET'])
+def get_job_reviews(job_id):
+    """
+    Get all reviews for a specific job - QUERIES DATABASE
+    
+    Returns reviews left by both client and freelancer for this job.
+    """
+    job = Job.query.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    reviews = Review.query.filter_by(job_id=job_id).all()
+    
+    return jsonify({
+        'job': {
+            'id': job.id,
+            'title': job.title,
+            'status': job.status
+        },
+        'reviews': [{
+            'id': r.id,
+            'rating': r.rating,
+            'comment': r.comment,
+            'image_url': r.image_url,
+            'created_at': r.created_at.isoformat(),
+            'reviewer': {
+                'id': r.reviewer.id,
+                'username': r.reviewer.username,
+                'user_type': r.reviewer.user_type
+            },
+            'reviewee': {
+                'id': r.reviewee.id,
+                'username': r.reviewee.username,
+                'user_type': r.reviewee.user_type
+            }
+        } for r in reviews]
+    }), 200
+
+
+@app.route('/api/reviews/pending', methods=['GET'])
+def get_pending_reviews():
+    """
+    Get jobs where the logged-in user can leave a review - QUERIES DATABASE
+    
+    Returns completed jobs where:
+    - User is either client or freelancer
+    - User hasn't left a review yet
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Find completed jobs where user is involved
+    if user.user_type == 'client':
+        jobs = Job.query.filter_by(
+            client_id=user.id,
+            status='completed'
+        ).all()
+    else:
+        jobs = Job.query.filter_by(
+            assigned_freelancer_id=user.id,
+            status='completed'
+        ).all()
+    
+    pending = []
+    for job in jobs:
+        # Determine who to review
+        if user.user_type == 'client':
+            reviewee_id = job.assigned_freelancer_id
+        else:
+            reviewee_id = job.client_id
+        
+        if not reviewee_id:
+            continue
+        
+        # Check if review already exists
+        existing = Review.query.filter_by(
+            job_id=job.id,
+            reviewer_id=user.id,
+            reviewee_id=reviewee_id
+        ).first()
+        
+        if not existing:
+            reviewee = User.query.get(reviewee_id)
+            pending.append({
+                'job_id': job.id,
+                'job_title': job.title,
+                'reviewee': {
+                    'id': reviewee.id,
+                    'username': reviewee.username,
+                    'user_type': reviewee.user_type
+                }
+            })
+    
+    return jsonify({'pending_reviews': pending}), 200
+
+
 @app.route('/api/conversations', methods=['GET'])
 def get_conversations():
     """
