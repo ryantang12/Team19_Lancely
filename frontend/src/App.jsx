@@ -106,7 +106,13 @@ function App() {
 
   const showMessages = () => setView('messages');
   // ────────────────────────────────────────────────────────────────
-
+  
+  const showReviews = () => setView('reviews');
+  const showUserProfile = (userId) => {
+    setSelectedJob({ userId }); // Reuse selectedJob to store userId
+    setView('userProfile');
+  };
+  
   const loadJobs = async () => {
     const data = await api.get('/jobs');
     setJobs(data.jobs || []);
