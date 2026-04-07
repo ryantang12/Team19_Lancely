@@ -189,6 +189,12 @@ function App() {
             goBack={() => setView('messages')}
           />
         )}
+        {view === 'reviews' && (
+          <ReviewsPage user={user} showUserProfile={showUserProfile} />
+        )}
+        {view === 'userProfile' && selectedJob?.userId && (
+          <UserProfilePage userId={selectedJob.userId} currentUser={user} />
+        )}
         {/* ─────────────── */}
       </div>
     </div>
