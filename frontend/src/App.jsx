@@ -966,5 +966,293 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
     </div>
   );
 }
+// ============================================================================
+// NEW: REVIEWS PAGE (list pending reviews and write reviews)
+// ============================================================================
 
+function ReviewsPage({ user, showUserProfile }) {
+  const [pendingReviews, setPendingReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedReview, setSelectedReview] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    api.get('/reviews/pending').then(data => {
+      setPendingReviews(data.pending_reviews || []);
+      setLoading(false);
+    });
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="form-page">
+        <p>Please log in to view reviews.</p>
+      </div>
+    );
+  }
+
+  if (selectedReview) {
+    return (
+      <LeaveReviewForm
+        review={selectedReview}
+        user={user}
+        onCancel={() => setSelectedReview(null)}
+        onSuccess={() => {
+          setSelectedReview(null);
+          // Refresh pending reviews
+          api.get('/reviews/pending').then(data => {
+            setPendingReviews(data.pending_reviews || []);
+          });
+        }}
+      />
+    );
+  }
+
+  if (loading) return <div className="form-page"><p>Loading...</p></div>;
+
+  return (
+    <div className="reviews-page">
+      <h2>⭐ Reviews</h2>
+
+      <div className="review-actions">
+        <button 
+          className="view-my-reviews-btn"
+          onClick={() => showUserProfile(user.id)}
+        >
+          View My Reviews ({user.username})
+        </button>
+      </div>
+
+      <div className="pending-section">
+        <h3>Pending Reviews</h3>
+        {pendingReviews.length === 0 ? (
+          <div className="empty-state">
+            <p>No pending reviews.</p>
+            <p><small>Complete a job to leave a review!</small></p>
+          </div>
+        ) : (
+          <div className="pending-reviews-list">
+            {pendingReviews.map(pr => (
+              <div key={`${pr.job_id}-${pr.reviewee.id}`} className="pending-review-card">
+                <div className="pr-header">
+                  <span className="pr-job-title">{pr.job_title}</span>
+                </div>
+                <p className="pr-reviewee">
+                  Review {pr.reviewee.user_type === 'client' ? 'client' : 'freelancer'}: 
+                  <strong> @{pr.reviewee.username}</strong>
+                </p>
+                <button
+                  className="write-review-btn"
+                  onClick={() => setSelectedReview(pr)}
+                >
+                  Write Review
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// NEW: LEAVE REVIEW FORM
+// ============================================================================
+
+function LeaveReviewForm({ review, user, onCancel, onSuccess }) {
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (rating === 0) {
+      setError('Please select a rating');
+      return;
+    }
+
+    if (!comment.trim()) {
+      setError('Please write a comment');
+      return;
+    }
+
+    setSubmitting(true);
+    const result = await api.post('/reviews', {
+      job_id: review.job_id,
+      reviewee_id: review.reviewee.id,
+      rating,
+      comment: comment.trim(),
+      image_url: imageUrl.trim()
+    });
+
+    setSubmitting(false);
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <div className="form-page review-form">
+      <h2>Write Review</h2>
+      
+      <div className="review-context">
+        <p><strong>Job:</strong> {review.job_title}</p>
+        <p>
+          <strong>Reviewing:</strong> @{review.reviewee.username} 
+          ({review.reviewee.user_type})
+        </p>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      <form onSubmit={handleSubmit}>
+        <label>Rating *</label>
+        <div className="star-rating">
+          {[1, 2, 3, 4, 5].map(star => (
+            <span
+              key={star}
+              className={`star ${star <= (hoverRating || rating) ? 'filled' : ''}`}
+              onClick={() => setRating(star)}
+              onMouseEnter={() => setHoverRating(star)}
+              onMouseLeave={() => setHoverRating(0)}
+            >
+              ★
+            </span>
+          ))}
+        </div>
+
+        <label>Your Review *</label>
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Share your experience working with this person..."
+          rows={6}
+          required
+        />
+
+        <label>Image URL (Optional)</label>
+        <input
+          type="url"
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="https://example.com/image.jpg"
+        />
+        {imageUrl && (
+          <div className="image-preview">
+            <img src={imageUrl} alt="Preview" onError={(e) => e.target.style.display = 'none'} />
+          </div>
+        )}
+
+        <button type="submit" disabled={submitting}>
+          {submitting ? 'Submitting...' : 'Submit Review'}
+        </button>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// NEW: USER PROFILE PAGE (shows reviews received)
+// ============================================================================
+
+function UserProfilePage({ userId, currentUser }) {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/reviews/user/${userId}`).then(data => {
+      setProfile(data);
+      setLoading(false);
+    });
+  }, [userId]);
+
+  if (loading) return <div className="form-page"><p>Loading profile...</p></div>;
+
+  if (!profile) return <div className="form-page"><p>User not found</p></div>;
+
+  const { user, average_rating, total_reviews, reviews } = profile;
+
+  return (
+    <div className="profile-page">
+      <div className="profile-header">
+        <h2>
+          {user.first_name} {user.last_name}
+          <span className="username-tag">@{user.username}</span>
+        </h2>
+        <div className="user-type-badge">
+          {user.user_type === 'client' ? '👤 Client' : '🔧 Freelancer'}
+        </div>
+      </div>
+
+      <div className="rating-summary">
+        <div className="avg-rating">
+          <div className="rating-number">{average_rating.toFixed(1)}</div>
+          <div className="stars-display">
+            {[1, 2, 3, 4, 5].map(star => (
+              <span key={star} className={`star ${star <= Math.round(average_rating) ? 'filled' : ''}`}>
+                ★
+              </span>
+            ))}
+          </div>
+          <div className="review-count">{total_reviews} review{total_reviews !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+
+      <div className="reviews-section">
+        <h3>Reviews</h3>
+        {reviews.length === 0 ? (
+          <div className="empty-state">
+            <p>No reviews yet.</p>
+          </div>
+        ) : (
+          <div className="reviews-list">
+            {reviews.map(rev => (
+              <div key={rev.id} className="review-card">
+                <div className="review-header">
+                  <div className="reviewer-info">
+                    <strong>@{rev.reviewer.username}</strong>
+                    <span className="review-date">
+                      {new Date(rev.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="review-stars">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <span key={star} className={`star ${star <= rev.rating ? 'filled' : ''}`}>
+                        ★
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="review-job">
+                  <small>Job: {rev.job.title}</small>
+                </div>
+
+                <p className="review-comment">{rev.comment}</p>
+
+                {rev.image_url && (
+                  <div className="review-image">
+                    <img src={rev.image_url} alt="Review" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 export default App;
