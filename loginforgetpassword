@@ -1,0 +1,70 @@
+import { useState } from 'react';
+import { Mail } from 'lucide-react';
+
+export default function ForgotPassword() {
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = () => {
+    console.log('Password reset requested for:', resetEmail);
+    setResetSent(true);
+    // Simulate API call
+    setTimeout(() => {
+      setResetSent(false);
+      setResetEmail('');
+    }, 3000);
+  };
+
+  if (resetSent) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">Check your email</h3>
+        <p className="text-gray-600">
+          We've sent a password reset link to <strong>{resetEmail}</strong>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Reset Password</h2>
+        <p className="text-gray-600 mb-6">
+          Enter your email address and we'll send you a link to reset your password.
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-2">
+          Email Address
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Mail className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            id="reset-email"
+            type="email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+            placeholder="you@example.com"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={handleForgotPassword}
+        className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
+      >
+        Send Reset Link
+      </button>
+    </div>
+  );
+}
