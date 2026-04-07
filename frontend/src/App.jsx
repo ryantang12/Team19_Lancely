@@ -138,6 +138,7 @@ function App() {
 
               {/* ── NEW: Messages button with unread badge ── */}
               <button onClick={showMessages} className="msg-btn">
+              <button onClick={showReviews}>⭐ Reviews</button>
                 💬 Messages
                 {unreadCount > 0 && (
                   <span className="unread-badge">
