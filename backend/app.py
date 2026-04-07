@@ -134,10 +134,15 @@ class Review(db.Model):
     reviewer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     reviewee_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-    rating = db.Column(db.Integer, nullable=False)  # 1-5
+    rating = db.Column(db.Integer, nullable=False)  # 1-5 stars
     comment = db.Column(db.Text, nullable=False)
+    image_url = db.Column(db.String(500))  # Optional image for the review
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships to access user and job info easily
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id])
+    reviewee = db.relationship('User', foreign_keys=[reviewee_id])
+    job = db.relationship('Job', foreign_keys=[job_id])
 
 # ============================================================================
 # NEW: MESSAGE MODEL
