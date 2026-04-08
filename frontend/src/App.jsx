@@ -12,7 +12,7 @@ import './App.css';
 
 const API_URL = 'http://localhost:5001/api';
 
-// Helper to make API calls
+// Helper to make API calls with the auth token automatically attached
 const api = {
   post: async (url, data) => {
     const token = localStorage.getItem('token');
@@ -49,12 +49,11 @@ function App() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [categories, setCategories] = useState([]);
 
-  // ── NEW: chat state ──────────────────────────────────────────────
+  // Chat state: tracks unread count for the badge and which chat is open
   const [unreadCount, setUnreadCount] = useState(0);
-  const [selectedChat, setSelectedChat] = useState(null); // { job, receiverId }
-  // ────────────────────────────────────────────────────────────────
+  const [selectedChat, setSelectedChat] = useState(null);
 
-  // Load on startup
+  // On startup, restore the logged-in user from the saved token
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -62,13 +61,13 @@ function App() {
         if (data.user) setUser(data.user);
       }).catch(() => localStorage.removeItem('token'));
     }
-
     api.get('/categories').then(data => {
       setCategories(data.categories || []);
     });
   }, []);
 
-  // ── NEW: poll unread count every 5 seconds when logged in ────────
+  // Poll for unread messages every 5 seconds while logged in
+  // This keeps the navbar badge up to date without needing websockets
   useEffect(() => {
     if (!user) {
       setUnreadCount(0);
@@ -79,33 +78,28 @@ function App() {
         setUnreadCount(data.count || 0);
       }).catch(() => {});
     };
-    fetchUnread(); // run immediately on login
+    fetchUnread();
     const interval = setInterval(fetchUnread, 5000);
-    return () => clearInterval(interval); // cleanup on logout
+    return () => clearInterval(interval);
   }, [user]);
-  // ────────────────────────────────────────────────────────────────
 
   const showHome = () => setView('home');
   const showRegister = () => setView('register');
   const showLogin = () => setView('login');
-  const showJobs = () => {
-    setView('jobs');
-    loadJobs();
-  };
+  const showJobs = () => { setView('jobs'); loadJobs(); };
   const showJobForm = () => setView('jobForm');
+  const showMessages = () => setView('messages');
+
   const showJobDetail = (job) => {
     setSelectedJob(job);
     setView('jobDetail');
   };
 
-  // ── NEW: open chat for a specific job ───────────────────────────
+  // Open a chat window for a specific job, messaging a specific user
   const openChat = (job, receiverId) => {
     setSelectedChat({ job, receiverId });
     setView('chat');
   };
-
-  const showMessages = () => setView('messages');
-  // ────────────────────────────────────────────────────────────────
 
   const loadJobs = async () => {
     const data = await api.get('/jobs');
@@ -121,7 +115,6 @@ function App() {
 
   return (
     <div className="App">
-      {/* NAVIGATION */}
       <nav className="navbar">
         <h1 onClick={showHome} style={{ cursor: 'pointer' }}>🔧 LANCELY</h1>
         <div>
@@ -129,8 +122,6 @@ function App() {
           {user ? (
             <>
               <span>Hello, {user.username}!</span>
-
-              {/* ── NEW: Messages button with unread badge ── */}
               <button onClick={showMessages} className="msg-btn">
                 💬 Messages
                 {unreadCount > 0 && (
@@ -139,8 +130,6 @@ function App() {
                   </span>
                 )}
               </button>
-              {/* ─────────────────────────────────────────── */}
-
               {user.user_type === 'client' && (
                 <button onClick={showJobForm}>Post a Job</button>
               )}
@@ -155,21 +144,25 @@ function App() {
         </div>
       </nav>
 
-      {/* MAIN CONTENT */}
       <div className="container">
-        {view === 'home' && <HomePage showJobs={showJobs} showRegister={showRegister} />}
-        {view === 'register' && <RegisterPage setUser={setUser} setView={setView} />}
-        {view === 'login' && <LoginPage setUser={setUser} setView={setView} />}
-        {view === 'jobs' && <JobsPage jobs={jobs} showJobDetail={showJobDetail} />}
-        {view === 'jobForm' && <JobFormPage categories={categories} setView={setView} loadJobs={loadJobs} />}
-        {view === 'jobDetail' && (
-          <JobDetailPage
-            job={selectedJob}
-            user={user}
-            openChat={openChat}   // NEW prop
-          />
+        {view === 'home' && (
+          <HomePage showJobs={showJobs} showRegister={showRegister} />
         )}
-        {/* ── NEW views ── */}
+        {view === 'register' && (
+          <RegisterPage setUser={setUser} setView={setView} />
+        )}
+        {view === 'login' && (
+          <LoginPage setUser={setUser} setView={setView} />
+        )}
+        {view === 'jobs' && (
+          <JobsPage jobs={jobs} showJobDetail={showJobDetail} />
+        )}
+        {view === 'jobForm' && (
+          <JobFormPage categories={categories} setView={setView} loadJobs={loadJobs} />
+        )}
+        {view === 'jobDetail' && (
+          <JobDetailPage job={selectedJob} user={user} openChat={openChat} />
+        )}
         {view === 'messages' && (
           <MessagesPage user={user} openChat={openChat} />
         )}
@@ -182,7 +175,6 @@ function App() {
             goBack={() => setView('messages')}
           />
         )}
-        {/* ─────────────── */}
       </div>
     </div>
   );
@@ -225,9 +217,7 @@ function RegisterPage({ setUser, setView }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
     const result = await api.post('/register', formData);
-
     if (result.error) {
       setError(result.error);
     } else {
@@ -241,57 +231,17 @@ function RegisterPage({ setUser, setView }) {
     <div className="form-page">
       <h2>Create Account</h2>
       {error && <div className="error">{error}</div>}
-
       <form onSubmit={handleSubmit}>
         <label>I am a:</label>
         <select name="user_type" value={formData.user_type} onChange={handleChange}>
           <option value="client">Client (I need work done)</option>
           <option value="freelancer">Freelancer (I do the work)</option>
         </select>
-
-        <input
-          type="text"
-          name="first_name"
-          placeholder="First Name"
-          value={formData.first_name}
-          onChange={handleChange}
-        />
-
-        <input
-          type="text"
-          name="last_name"
-          placeholder="Last Name"
-          value={formData.last_name}
-          onChange={handleChange}
-        />
-
-        <input
-          type="text"
-          name="username"
-          placeholder="Username"
-          value={formData.username}
-          onChange={handleChange}
-          required
-        />
-
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={handleChange}
-          required
-        />
-
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          value={formData.password}
-          onChange={handleChange}
-          required
-        />
-
+        <input type="text" name="first_name" placeholder="First Name" value={formData.first_name} onChange={handleChange} />
+        <input type="text" name="last_name" placeholder="Last Name" value={formData.last_name} onChange={handleChange} />
+        <input type="text" name="username" placeholder="Username" value={formData.username} onChange={handleChange} required />
+        <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
+        <input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
         <button type="submit">Create Account</button>
       </form>
     </div>
@@ -310,9 +260,7 @@ function LoginPage({ setUser, setView }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
     const result = await api.post('/login', { email, password });
-
     if (result.error) {
       setError(result.error);
     } else {
@@ -326,22 +274,9 @@ function LoginPage({ setUser, setView }) {
     <div className="form-page">
       <h2>Login</h2>
       {error && <div className="error">{error}</div>}
-
       <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button type="submit">Login</button>
       </form>
     </div>
@@ -358,11 +293,7 @@ function JobsPage({ jobs, showJobDetail }) {
       <h2>Available Jobs</h2>
       {jobs.length === 0 && <p>No jobs posted yet.</p>}
       {jobs.map(job => (
-        <div
-          key={job.id}
-          className="job-card"
-          onClick={() => showJobDetail(job)}
-        >
+        <div key={job.id} className="job-card" onClick={() => showJobDetail(job)}>
           <div className="job-header">
             <h3>{job.title}</h3>
             {job.is_urgent && <span className="badge urgent">🔥 URGENT</span>}
@@ -407,19 +338,9 @@ function JobFormPage({ categories, setView, loadJobs }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    if (formData.title.length < 10) {
-      setError('Title must be at least 10 characters');
-      return;
-    }
-
-    if (formData.description.length < 50) {
-      setError('Description must be at least 50 characters');
-      return;
-    }
-
+    if (formData.title.length < 10) { setError('Title must be at least 10 characters'); return; }
+    if (formData.description.length < 50) { setError('Description must be at least 50 characters'); return; }
     const result = await api.post('/jobs', formData);
-
     if (result.error) {
       setError(result.error);
     } else {
@@ -433,61 +354,31 @@ function JobFormPage({ categories, setView, loadJobs }) {
     <div className="form-page">
       <h2>Post a New Job</h2>
       {error && <div className="error">{error}</div>}
-
       <form onSubmit={handleSubmit}>
         <label>Job Title *</label>
-        <input
-          type="text"
-          name="title"
-          value={formData.title}
-          onChange={handleChange}
-          placeholder="e.g., Fix leaking kitchen faucet"
-          required
-        />
+        <input type="text" name="title" value={formData.title} onChange={handleChange} placeholder="e.g., Fix leaking kitchen faucet" required />
         <small>{formData.title.length}/10 minimum characters</small>
 
         <label>Category</label>
         <select name="category_id" value={formData.category_id} onChange={handleChange}>
           <option value="">Select category</option>
           {categories.map(cat => (
-            <option key={cat.id} value={cat.id}>
-              {cat.icon} {cat.name}
-            </option>
+            <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
           ))}
         </select>
 
         <label>Description *</label>
-        <textarea
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          placeholder="Describe the work you need done..."
-          rows="6"
-          required
-        />
+        <textarea name="description" value={formData.description} onChange={handleChange} placeholder="Describe the work you need done..." rows="6" required />
         <small>{formData.description.length}/50 minimum characters</small>
 
         <div className="row">
           <div>
             <label>City</label>
-            <input
-              type="text"
-              name="location_city"
-              value={formData.location_city}
-              onChange={handleChange}
-              placeholder="Syracuse"
-            />
+            <input type="text" name="location_city" value={formData.location_city} onChange={handleChange} placeholder="Syracuse" />
           </div>
           <div>
             <label>State</label>
-            <input
-              type="text"
-              name="location_state"
-              value={formData.location_state}
-              onChange={handleChange}
-              placeholder="NY"
-              maxLength="2"
-            />
+            <input type="text" name="location_state" value={formData.location_state} onChange={handleChange} placeholder="NY" maxLength="2" />
           </div>
         </div>
 
@@ -501,26 +392,13 @@ function JobFormPage({ categories, setView, loadJobs }) {
           </div>
           <div>
             <label>Budget Amount ($) *</label>
-            <input
-              type="number"
-              name="budget_amount"
-              value={formData.budget_amount}
-              onChange={handleChange}
-              placeholder="150"
-              min="1"
-              required
-            />
+            <input type="number" name="budget_amount" value={formData.budget_amount} onChange={handleChange} placeholder="150" min="1" required />
           </div>
         </div>
 
         <label>
-          <input
-            type="checkbox"
-            name="is_urgent"
-            checked={formData.is_urgent}
-            onChange={handleChange}
-          />
-          🔥 This is an urgent job
+          <input type="checkbox" name="is_urgent" checked={formData.is_urgent} onChange={handleChange} />
+          {' '}🔥 This is an urgent job
         </label>
 
         <button type="submit">Post Job</button>
@@ -530,15 +408,22 @@ function JobFormPage({ categories, setView, loadJobs }) {
 }
 
 // ============================================================================
-// JOB DETAIL PAGE  (updated to include "Open Chat" button)
+// JOB DETAIL PAGE
 // ============================================================================
 
-function JobDetailPage({ job, user, openChat }) {
+function JobDetailPage({ job: initialJob, user, openChat }) {
+  // Store the job in local state so we can refresh it after accepting a proposal.
+  // Using the prop directly would leave us with stale data (no assigned_freelancer_id)
+  // until the user navigated away and back.
+  const [currentJob, setCurrentJob] = useState(initialJob);
+  const job = currentJob;
+
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [coverLetter, setCoverLetter] = useState('');
   const [proposedAmount, setProposedAmount] = useState('');
 
+  // Load proposals when a client views their own job
   useEffect(() => {
     if (job && user && user.id === job.client.id) {
       api.get(`/proposals/${job.id}`).then(data => {
@@ -549,18 +434,12 @@ function JobDetailPage({ job, user, openChat }) {
 
   const handleSubmitProposal = async (e) => {
     e.preventDefault();
-
-    if (coverLetter.length < 50) {
-      alert('Cover letter must be at least 50 characters');
-      return;
-    }
-
+    if (coverLetter.length < 50) { alert('Cover letter must be at least 50 characters'); return; }
     const result = await api.post('/proposals', {
       job_id: job.id,
       cover_letter: coverLetter,
       proposed_amount: proposedAmount
     });
-
     if (result.error) {
       alert(result.error);
     } else {
@@ -577,14 +456,16 @@ function JobDetailPage({ job, user, openChat }) {
     const result = await api.post(`/proposals/${proposalId}/accept`, {});
 
     if (result.message) {
-      alert('Proposal accepted! You can now chat with the contractor.');
-      api.get(`/proposals/${job.id}`).then(data => {
-        setProposals(data.proposals || []);
-      });
-      // Refresh job so assigned_freelancer_id is up to date
-      api.get(`/jobs/${job.id}`).then(data => {
-        if (data.job) Object.assign(job, data.job);
-      });
+      // Reload both the proposals list and the job at the same time.
+      // The fresh job will have assigned_freelancer_id set, which is
+      // what makes the Message button appear on the accepted proposal card.
+      const [proposalsData, jobData] = await Promise.all([
+        api.get(`/proposals/${job.id}`),
+        api.get(`/jobs/${job.id}`)
+      ]);
+      setProposals(proposalsData.proposals || []);
+      if (jobData.job) setCurrentJob(jobData.job);
+      alert('Proposal accepted! You can now message this contractor.');
     }
   };
 
@@ -592,17 +473,7 @@ function JobDetailPage({ job, user, openChat }) {
 
   const isOwner = user && user.id === job.client.id;
   const isFreelancer = user && user.user_type === 'freelancer';
-
-  // ── NEW: determine if user can chat ─────────────────────────────
-  const isAssignedFreelancer =
-    user && job.assigned_freelancer_id && user.id === job.assigned_freelancer_id;
-  const canChat = isOwner && job.assigned_freelancer_id;
-
-  // Work out who to message: client messages the freelancer, freelancer messages the client
-  const chatReceiverId = isOwner
-    ? job.assigned_freelancer_id
-    : job.client.id;
-  // ────────────────────────────────────────────────────────────────
+  const isAssignedFreelancer = user && job.assigned_freelancer_id && user.id === job.assigned_freelancer_id;
 
   return (
     <div className="job-detail">
@@ -638,20 +509,16 @@ function JobDetailPage({ job, user, openChat }) {
         <small>Views: {job.views_count} | Proposals: {job.proposal_count}</small>
       </div>
 
-      {/* ── NEW: Chat button — visible to client (after hiring) and assigned freelancer ── */}
-      {(canChat || isAssignedFreelancer) && (
+      {/* Chat button for the hired freelancer — lets them message the client */}
+      {isAssignedFreelancer && (
         <div className="detail-section">
-          <button
-            className="chat-btn"
-            onClick={() => openChat(job, chatReceiverId)}
-          >
-            💬 Open Chat
+          <button className="chat-btn" onClick={() => openChat(job, job.client.id)}>
+            💬 Message Client
           </button>
         </div>
       )}
-      {/* ──────────────────────────────────────────────────────────────────────────────── */}
 
-      {/* PROPOSAL FORM FOR FREELANCERS */}
+      {/* Proposal form — only for freelancers on open jobs */}
       {isFreelancer && !isOwner && job.status === 'open' && (
         <div className="detail-section">
           {!showProposalForm ? (
@@ -660,25 +527,10 @@ function JobDetailPage({ job, user, openChat }) {
             <form onSubmit={handleSubmitProposal}>
               <h3>Submit Your Proposal</h3>
               <label>Your Bid ($)</label>
-              <input
-                type="number"
-                value={proposedAmount}
-                onChange={(e) => setProposedAmount(e.target.value)}
-                placeholder="140"
-                min="1"
-                required
-              />
-
+              <input type="number" value={proposedAmount} onChange={(e) => setProposedAmount(e.target.value)} placeholder="140" min="1" required />
               <label>Cover Letter (min 50 characters)</label>
-              <textarea
-                value={coverLetter}
-                onChange={(e) => setCoverLetter(e.target.value)}
-                placeholder="Explain why you're perfect for this job..."
-                rows="5"
-                required
-              />
+              <textarea value={coverLetter} onChange={(e) => setCoverLetter(e.target.value)} placeholder="Explain why you're perfect for this job..." rows="5" required />
               <small>{coverLetter.length}/50 characters</small>
-
               <button type="submit">Submit Proposal</button>
               <button type="button" onClick={() => setShowProposalForm(false)}>Cancel</button>
             </form>
@@ -686,7 +538,7 @@ function JobDetailPage({ job, user, openChat }) {
         </div>
       )}
 
-      {/* PROPOSALS LIST FOR JOB OWNER */}
+      {/* Proposals list — only visible to the job owner */}
       {isOwner && proposals.length > 0 && (
         <div className="detail-section">
           <h3>Proposals ({proposals.length})</h3>
@@ -696,9 +548,18 @@ function JobDetailPage({ job, user, openChat }) {
               <p>Bid: <strong>${p.proposed_amount}</strong></p>
               <p>{p.cover_letter}</p>
               <small>Status: {p.status}</small>
-              {p.status === 'pending' && (
-                <button onClick={() => handleAcceptProposal(p.id)}>Accept</button>
-              )}
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                {/* Accept button — shown while the proposal is still pending */}
+                {p.status === 'pending' && (
+                  <button onClick={() => handleAcceptProposal(p.id)}>Accept</button>
+                )}
+                {/* Message button — replaces Accept once the proposal is accepted */}
+                {p.status === 'accepted' && (
+                  <button className="chat-btn" onClick={() => openChat(job, p.freelancer.id)}>
+                    💬 Message {p.freelancer.username}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -708,7 +569,7 @@ function JobDetailPage({ job, user, openChat }) {
 }
 
 // ============================================================================
-// NEW: MESSAGES PAGE  (list of conversations)
+// MESSAGES PAGE — list of all conversations for the logged-in user
 // ============================================================================
 
 function MessagesPage({ user, openChat }) {
@@ -724,11 +585,7 @@ function MessagesPage({ user, openChat }) {
   }, [user]);
 
   if (!user) {
-    return (
-      <div className="form-page">
-        <p>Please log in to view your messages.</p>
-      </div>
-    );
+    return <div className="form-page"><p>Please log in to view your messages.</p></div>;
   }
 
   if (loading) return <div className="form-page"><p>Loading conversations...</p></div>;
@@ -740,11 +597,7 @@ function MessagesPage({ user, openChat }) {
       {conversations.length === 0 && (
         <div className="empty-state">
           <p>No conversations yet.</p>
-          <p>
-            <small>
-              Chat becomes available after a client accepts a contractor's proposal.
-            </small>
-          </p>
+          <small>Chat becomes available after a client accepts a proposal.</small>
         </div>
       )}
 
@@ -753,7 +606,6 @@ function MessagesPage({ user, openChat }) {
           key={conv.job_id}
           className={`conversation-card ${conv.unread_count > 0 ? 'has-unread' : ''}`}
           onClick={() => {
-            // Build a minimal job object that ChatWindow needs
             const jobObj = {
               id: conv.job_id,
               title: conv.job_title,
@@ -790,7 +642,7 @@ function MessagesPage({ user, openChat }) {
 }
 
 // ============================================================================
-// NEW: CHAT WINDOW  (the actual messaging interface)
+// CHAT WINDOW — the actual messaging interface
 // ============================================================================
 
 function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
@@ -799,7 +651,6 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
 
-  // Load messages and mark them as read
   const loadMessages = () => {
     api.get(`/messages/${job.id}`).then(data => {
       setMessages(data.messages || []);
@@ -808,14 +659,13 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
 
   const markRead = () => {
     api.post('/messages/read', { job_id: job.id }).then(() => {
-      // Refresh the global unread count after marking read
       api.get('/messages/unread').then(data => {
         setUnreadCount(data.count || 0);
       });
     }).catch(() => {});
   };
 
-  // Load on mount, then poll every 5 seconds
+  // Load messages immediately, then refresh every 5 seconds
   useEffect(() => {
     loadMessages();
     markRead();
@@ -826,7 +676,7 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
     return () => clearInterval(interval);
   }, [job.id]);
 
-  // Auto-scroll to newest message
+  // Scroll to the bottom whenever new messages arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -834,14 +684,12 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
   const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
-
     setSending(true);
     const result = await api.post('/messages', {
       job_id: job.id,
       receiver_id: receiverId,
       content: trimmed
     });
-
     if (result.error) {
       alert(result.error);
     } else {
@@ -851,6 +699,7 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
     setSending(false);
   };
 
+  // Enter sends, Shift+Enter adds a new line
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -858,18 +707,10 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
     }
   };
 
-  // Format timestamp nicely
-  const formatTime = (iso) => {
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatDate = (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 
-  const formatDate = (iso) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
-
-  // Group messages by date to show date separators
+  // Group messages by date to show date separator labels between them
   const groupedMessages = messages.reduce((groups, msg) => {
     const date = formatDate(msg.created_at);
     if (!groups[date]) groups[date] = [];
@@ -879,48 +720,37 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
 
   return (
     <div className="chat-page">
-      {/* Header */}
       <div className="chat-header">
         <button className="back-btn" onClick={goBack}>← Back</button>
-        <div className="chat-title">
-          <span>💬 {job.title}</span>
-        </div>
+        <div className="chat-title">💬 {job.title}</div>
       </div>
 
-      {/* Messages area */}
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="chat-empty">
             <p>No messages yet.</p>
-            <p><small>Send the first message to get started!</small></p>
+            <small>Send the first message to get started!</small>
           </div>
         )}
 
         {Object.entries(groupedMessages).map(([date, msgs]) => (
           <div key={date}>
-            {/* Date separator */}
             <div className="date-separator">
               <span>{date}</span>
             </div>
-
             {msgs.map(msg => {
               const isMe = msg.sender_id === user.id;
               return (
-                <div
-                  key={msg.id}
-                  className={`message-row ${isMe ? 'me' : 'them'}`}
-                >
-                  {/* Show sender name for their messages */}
-                  {!isMe && (
-                    <div className="msg-sender">{msg.sender_username}</div>
-                  )}
+                <div key={msg.id} className={`message-row ${isMe ? 'me' : 'them'}`}>
+                  {!isMe && <div className="msg-sender">{msg.sender_username}</div>}
                   <div className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-them'}`}>
                     {msg.content}
                   </div>
                   <div className={`msg-time ${isMe ? 'time-me' : 'time-them'}`}>
                     {formatTime(msg.created_at)}
-                    {/* Show read receipt for sent messages */}
-                    {isMe && <span className="read-receipt">{msg.is_read ? ' ✓✓' : ' ✓'}</span>}
+                    {isMe && (
+                      <span className="read-receipt">{msg.is_read ? ' ✓✓' : ' ✓'}</span>
+                    )}
                   </div>
                 </div>
               );
@@ -928,11 +758,9 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
           </div>
         ))}
 
-        {/* Invisible div to scroll to */}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
       <div className="chat-input-area">
         <textarea
           className="chat-input"

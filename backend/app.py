@@ -484,31 +484,51 @@ def get_proposals(job_id):
 
 @app.route('/api/proposals/<int:proposal_id>/accept', methods=['POST'])
 def accept_proposal(proposal_id):
-    """Accept a proposal - UPDATES DATABASE"""
+    """
+    Accept a proposal - UPDATES DATABASE
+    
+    When a client accepts a proposal, three things happen:
+    1. The proposal status changes from 'pending' to 'accepted'
+    2. The job status changes from 'open' to 'assigned'
+    3. The job records WHICH freelancer was hired (assigned_freelancer_id)
+    
+    Step 3 is the key addition - without storing who was hired,
+    the chat system has no way to know who the two participants are.
+    We also return the freelancer_id in the response so the frontend
+    can immediately open chat without needing a second API call.
+    """
     user = get_current_user()
-
     if not user:
         return jsonify({'error': 'Not authenticated'}), 401
 
+    # Look up the proposal being accepted
     proposal = Proposal.query.get_or_404(proposal_id)
 
-    # Verify user owns the job
+    # Security check: only the client who posted the job can accept proposals
     if proposal.job.client_id != user.id:
         return jsonify({'error': 'Not authorized'}), 403
 
-    # Update proposal status
+    # Mark this proposal as accepted
     proposal.status = 'accepted'
 
-    # Update job status
+    # Mark the job as assigned (no longer open for new proposals)
     proposal.job.status = 'assigned'
 
-    # NEW: Record which freelancer was hired so chat can address them
+    # KEY LINE: Record which freelancer was hired on the job itself.
+    # This is what allows the chat system to know who the two
+    # participants are. Without this, chat cannot start.
     proposal.job.assigned_freelancer_id = proposal.freelancer_id
 
-    # Save changes
+    # Save all changes to the database in one transaction
     db.session.commit()
 
-    return jsonify({'message': 'Proposal accepted'}), 200
+    # Return the freelancer_id in the response so the React frontend
+    # can immediately update its job state and show the chat button
+    # without needing to make a separate GET /jobs/<id> call first
+    return jsonify({
+        'message': 'Proposal accepted',
+        'freelancer_id': proposal.freelancer_id
+    }), 200
 
 
 # --- REVIEW ROUTES ---
@@ -684,62 +704,99 @@ def mark_messages_read():
 @app.route('/api/conversations', methods=['GET'])
 def get_conversations():
     """
-    Get a list of jobs that have an active chat thread for the logged-in user.
+    Get all conversations available to the logged-in user.
 
-    Used by the MessagesPage to show a list of conversations.
-    Returns jobs where the user is either the client or the assigned freelancer,
-    and at least one message has been sent.
+    PREVIOUS PROBLEM: The old version only returned jobs that already
+    had at least one message. This meant a client who just accepted a
+    proposal had no way to start the first message from the Messages tab
+    because the conversation didn't appear yet.
+
+    FIX: Instead of looking for existing messages, we now look for all
+    ASSIGNED jobs where the user is a participant (either as the client
+    or the hired freelancer). This means the conversation appears in the
+    Messages tab immediately after a proposal is accepted, even before
+    any messages have been sent.
+
+    For each conversation we also include:
+    - unread_count: how many unread messages the current user has
+    - last_message: a preview of the most recent message (or empty)
+    - other_user: who they are chatting with
     """
     user = get_current_user()
     if not user:
         return jsonify({'error': 'Not authenticated'}), 401
 
-    # Find job IDs that have messages involving this user
-    sent = db.session.query(Message.job_id).filter_by(sender_id=user.id)
-    received = db.session.query(Message.job_id).filter_by(receiver_id=user.id)
-    job_ids = sent.union(received).all()
-    job_ids = [j[0] for j in job_ids]
-
     conversations = []
-    for job_id in job_ids:
-        job = Job.query.get(job_id)
-        if not job:
+
+    # Find all jobs this user is involved in as a participant.
+    # Clients see jobs they posted that have been assigned.
+    # Freelancers see jobs where they were the hired contractor.
+    if user.user_type == 'client':
+        assigned_jobs = Job.query.filter_by(
+            client_id=user.id,
+            status='assigned'
+        ).all()
+    else:
+        assigned_jobs = Job.query.filter_by(
+            assigned_freelancer_id=user.id,
+            status='assigned'
+        ).all()
+
+    # Build the conversation data for each job
+    for job in assigned_jobs:
+
+        # Skip any edge case where a job is assigned but
+        # the freelancer id wasn't saved (shouldn't happen
+        # with the fixed accept_proposal above, but safe to check)
+        if not job.assigned_freelancer_id:
             continue
 
-        # Count unread messages for this job
+        # Count how many messages this user hasn't read yet
+        # for this specific job thread. This drives the unread
+        # badge number shown on each conversation card.
         unread = Message.query.filter_by(
-            job_id=job_id,
+            job_id=job.id,
             receiver_id=user.id,
             is_read=False
         ).count()
 
-        # Get the last message for preview
-        last_msg = Message.query.filter_by(job_id=job_id) \
+        # Get the most recent message for the preview text.
+        # Returns None if no messages have been sent yet.
+        last_msg = Message.query.filter_by(job_id=job.id) \
             .order_by(Message.created_at.desc()).first()
 
-        # Determine who the other person is
-        if job.client_id == user.id and job.assigned_freelancer_id:
+        # Figure out who the OTHER person in the conversation is.
+        # If the current user is the client, the other person is
+        # the hired freelancer, and vice versa.
+        if user.user_type == 'client':
             other_user = User.query.get(job.assigned_freelancer_id)
         else:
             other_user = User.query.get(job.client_id)
 
+        # Build the conversation object for this job and add it to the list
         conversations.append({
             'job_id': job.id,
             'job_title': job.title,
+            # Who the current user is chatting with
             'other_user': {
                 'id': other_user.id,
                 'username': other_user.username
             } if other_user else None,
+            # Number of unread messages (drives the badge)
             'unread_count': unread,
+            # Preview text: truncate long messages at 60 characters
             'last_message': last_msg.content[:60] + '...' if last_msg and len(last_msg.content) > 60 else (last_msg.content if last_msg else ''),
+            # Timestamp of last message - used for sorting and display
             'last_message_at': last_msg.created_at.isoformat() if last_msg else None,
+            # These two IDs are needed by the frontend to figure out
+            # which user to address messages to when opening the chat
             'assigned_freelancer_id': job.assigned_freelancer_id,
             'client_id': job.client_id
         })
 
-    # Sort by most recent message first
+    # Sort so the most recently active conversation appears first.
+    # Jobs with no messages yet sort to the bottom (empty string < any date).
     conversations.sort(key=lambda x: x['last_message_at'] or '', reverse=True)
-
     return jsonify({'conversations': conversations}), 200
 
 
