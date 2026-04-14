@@ -34,7 +34,11 @@ import os
 # STEP 1: CREATE FLASK APP
 # ============================================================================
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'build'),
+    static_url_path=''
+)
 
 # Configuration (all in one place)
 app.config['SECRET_KEY'] = 'your-secret-key-here'  # Change this!
@@ -112,6 +116,12 @@ class Job(db.Model):
     # Relationships
     proposals = db.relationship('Proposal', backref='job', lazy=True)
     messages = db.relationship('Message', backref='job', lazy=True)  # NEW
+    assigned_freelancer = db.relationship(
+        'User',
+        foreign_keys=[assigned_freelancer_id],
+        backref='assigned_jobs',
+        lazy=True
+    )
 
 
 class Proposal(db.Model):
@@ -432,6 +442,52 @@ def get_categories():
     }), 200
 
 
+@app.route('/api/my-jobs', methods=['GET'])
+def get_my_jobs():
+    """Get jobs and reservations for the logged-in user"""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    if user.user_type == 'client':
+        jobs = Job.query.filter_by(client_id=user.id).order_by(Job.created_at.desc()).all()
+    else:
+        jobs = Job.query.filter_by(assigned_freelancer_id=user.id).order_by(Job.created_at.desc()).all()
+
+    jobs_data = []
+    for job in jobs:
+        jobs_data.append({
+            'id': job.id,
+            'title': job.title,
+            'description': job.description,
+            'budget_amount': job.budget_amount,
+            'budget_type': job.budget_type,
+            'category': {
+                'id': job.category.id,
+                'name': job.category.name,
+                'icon': job.category.icon
+            } if job.category else None,
+            'status': job.status,
+            'assigned_freelancer': {
+                'id': job.assigned_freelancer.id,
+                'username': job.assigned_freelancer.username
+            } if job.assigned_freelancer else None,
+            'client': {
+                'id': job.client.id,
+                'username': job.client.username
+            } if job.client else None
+        })
+
+    return jsonify({
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'user_type': user.user_type
+        },
+        'jobs': jobs_data
+    }), 200
+
+
 # --- PROPOSAL ROUTES ---
 
 @app.route('/api/proposals', methods=['POST'])
@@ -518,31 +574,7 @@ def accept_proposal(proposal_id):
 
 # --- REVIEW ROUTES ---
 
-@app.route('/api/reviews', methods=['POST'])
-def create_review():
-    """Submit review - SAVES TO DATABASE"""
-    user = get_current_user()
-
-    if not user:
-        return jsonify({'error': 'Not authenticated'}), 401
-
-    data = request.json
-
-    # Create review
-    review = Review(
-        job_id=data['job_id'],
-        reviewer_id=user.id,
-        reviewee_id=data['reviewee_id'],
-        rating=int(data['rating']),
-        comment=data['comment']
-    )
-
-    # Save to database
-    db.session.add(review)
-    db.session.commit()
-
-    return jsonify({'message': 'Review submitted successfully'}), 201
-
+# REVIEW routes are defined below with full validation and authorization checks.
 
 # ============================================================================
 # NEW: CHAT / MESSAGE ROUTES
@@ -1001,6 +1033,15 @@ def init_db():
         print("✅ Message table ready!")
 
 
+# Serve React build files for all non-API routes
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react_app(path):
+    if path != '' and os.path.exists(os.path.join(app.static_folder, path)):
+        return app.send_static_file(path)
+    return app.send_static_file('index.html')
+
+
 # ============================================================================
 # STEP 6: RUN THE APP
 # ============================================================================
@@ -1028,3 +1069,7 @@ if __name__ == '__main__':
 
     # Run Flask app
     app.run(debug=True, host='0.0.0.0', port=5001)
+
+    # Run Flask app
+    app.run(debug=True, host='0.0.0.0', port=5001)
+

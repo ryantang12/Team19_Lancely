@@ -10,7 +10,7 @@ import './App.css';
 // CONFIGURATION
 // ============================================================================
 
-const API_URL = 'http://localhost:5001/api';
+const API_URL = '/api';
 
 // Helper to make API calls
 const api = {
@@ -105,6 +105,7 @@ function App() {
   };
 
   const showMessages = () => setView('messages');
+  const showAccount = () => setView('account');
   // ────────────────────────────────────────────────────────────────
   
   const showReviews = () => setView('reviews');
@@ -136,9 +137,7 @@ function App() {
             <>
               <span>Hello, {user.username}!</span>
 
-              {/* ── NEW: Messages button with unread badge ── */}
               <button onClick={showMessages} className="msg-btn">
-              <button onClick={showReviews}>⭐ Reviews</button>
                 💬 Messages
                 {unreadCount > 0 && (
                   <span className="unread-badge">
@@ -146,7 +145,8 @@ function App() {
                   </span>
                 )}
               </button>
-              {/* ─────────────────────────────────────────── */}
+              <button onClick={showReviews}>⭐ Reviews</button>
+              <button onClick={showAccount}>👤 Account</button>
 
               {user.user_type === 'client' && (
                 <button onClick={showJobForm}>Post a Job</button>
@@ -191,6 +191,9 @@ function App() {
         )}
         {view === 'reviews' && (
           <ReviewsPage user={user} showUserProfile={showUserProfile} />
+        )}
+        {view === 'account' && (
+          <AccountPage user={user} />
         )}
         {view === 'userProfile' && selectedJob?.userId && (
           <UserProfilePage userId={selectedJob.userId} currentUser={user} />
@@ -966,6 +969,127 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
     </div>
   );
 }
+
+// ============================================================================
+// NEW: ACCOUNT PAGE (reservations, posted jobs, history)
+// ============================================================================
+
+function AccountPage({ user }) {
+  const [accountData, setAccountData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    api.get('/my-jobs').then(data => {
+      setAccountData(data);
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="form-page">
+        <p>Please log in to view your account.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <div className="form-page"><p>Loading account...</p></div>;
+  if (!accountData) return <div className="form-page"><p>Unable to load account details.</p></div>;
+
+  const { jobs } = accountData;
+  const currentJobs = jobs.filter(job => job.status === 'assigned');
+  const openJobs = jobs.filter(job => job.status === 'open');
+  const completedJobs = jobs.filter(job => job.status === 'completed');
+
+  return (
+    <div className="account-page">
+      <h2>👤 My Account</h2>
+      <div className="account-summary">
+        <p><strong>Username:</strong> @{user.username}</p>
+        <p><strong>Type:</strong> {user.user_type === 'client' ? 'Client' : 'Freelancer'}</p>
+        <p><strong>Total jobs/reservations:</strong> {jobs.length}</p>
+      </div>
+
+      {user.user_type === 'client' ? (
+        <div className="account-section">
+          <h3>My Posted Jobs</h3>
+          {jobs.length === 0 ? (
+            <div className="empty-state">
+              <p>You have not posted any jobs yet.</p>
+              <p><small>Post a job to start receiving proposals.</small></p>
+            </div>
+          ) : (
+            jobs.map(job => (
+              <div key={job.id} className="account-card">
+                <div className="account-card-header">
+                  <span className="job-title">{job.title}</span>
+                  <span className={`status-tag status-${job.status}`}>{job.status}</span>
+                </div>
+                <p>{job.description}</p>
+                <p><strong>Budget:</strong> ${job.budget_amount} / {job.budget_type}</p>
+                <p><strong>Category:</strong> {job.category?.name || 'N/A'}</p>
+                {job.assigned_freelancer && (
+                  <p><strong>Reserved by:</strong> @{job.assigned_freelancer.username}</p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="account-section">
+          <h3>My Reservations</h3>
+          {jobs.length === 0 ? (
+            <div className="empty-state">
+              <p>You have not been assigned any jobs yet.</p>
+              <p><small>Accept proposals or wait for job assignments.</small></p>
+            </div>
+          ) : (
+            jobs.map(job => (
+              <div key={job.id} className="account-card">
+                <div className="account-card-header">
+                  <span className="job-title">{job.title}</span>
+                  <span className={`status-tag status-${job.status}`}>{job.status}</span>
+                </div>
+                <p>{job.description}</p>
+                <p><strong>Budget:</strong> ${job.budget_amount} / {job.budget_type}</p>
+                <p><strong>Customer:</strong> @{job.client.username}</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      <div className="account-section">
+        <h3>History</h3>
+        {completedJobs.length === 0 ? (
+          <div className="empty-state">
+            <p>No completed jobs yet.</p>
+            <p><small>Complete an assigned job to see it here.</small></p>
+          </div>
+        ) : (
+          completedJobs.map(job => (
+            <div key={job.id} className="account-card">
+              <div className="account-card-header">
+                <span className="job-title">{job.title}</span>
+                <span className="status-tag status-completed">completed</span>
+              </div>
+              <p>{job.description}</p>
+              {user.user_type === 'client' ? (
+                <p><strong>Completed by:</strong> @{job.assigned_freelancer?.username || 'N/A'}</p>
+              ) : (
+                <p><strong>Customer:</strong> @{job.client.username}</p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ============================================================================
 // NEW: REVIEWS PAGE (list pending reviews and write reviews)
 // ============================================================================
