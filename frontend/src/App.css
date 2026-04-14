@@ -196,6 +196,123 @@ body {
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
+.account-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.account-tab {
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #111827;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.account-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+.account-card {
+  background: white;
+  padding: 1.25rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.account-card:hover {
+  box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+
+.account-card.expanded {
+  border-color: #2563eb;
+}
+
+.account-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.job-title {
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.account-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.account-card-small {
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.account-card-toggle {
+  color: #6b7280;
+  font-weight: bold;
+}
+
+.account-card-details {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.status-tag {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.status-assigned {
+  background: #fef3c7;
+  color: #a16207;
+}
+
+.status-pending_completion {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.status-completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.action-btn {
+  margin-top: 1rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.action-btn:hover {
+  background: #1d4ed8;
+}
+
 .job-header {
   display: flex;
   justify-content: space-between;

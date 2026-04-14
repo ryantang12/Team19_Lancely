@@ -977,16 +977,53 @@ function ChatWindow({ job, receiverId, user, setUnreadCount, goBack }) {
 function AccountPage({ user }) {
   const [accountData, setAccountData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(user?.user_type === 'client' ? 'open' : 'assigned');
+  const [expandedJobId, setExpandedJobId] = useState(null);
 
-  useEffect(() => {
-    if (!user) return;
+  const loadAccount = () => {
+    setLoading(true);
     api.get('/my-jobs').then(data => {
       setAccountData(data);
       setLoading(false);
     }).catch(() => {
       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    loadAccount();
   }, [user]);
+
+  const refreshAccount = () => {
+    loadAccount();
+  };
+
+  const handleRequestCompletion = async (jobId) => {
+    if (!window.confirm('Mark this job as done and request confirmation from the contractor?')) return;
+    const result = await api.post(`/jobs/${jobId}/request-completion`, {});
+    if (result.error) {
+      alert(result.error || 'Unable to request completion.');
+      return;
+    }
+    alert('Completion requested. Contractor can now confirm the job.');
+    refreshAccount();
+  };
+
+  const handleConfirmCompletion = async (jobId) => {
+    if (!window.confirm('Confirm this job is completed?')) return;
+    const result = await api.post(`/jobs/${jobId}/confirm-completion`, {});
+    if (result.error) {
+      alert(result.error || 'Unable to confirm completion.');
+      return;
+    }
+    alert('Job marked as completed.');
+    refreshAccount();
+  };
+
+  const toggleJobDetails = (jobId) => {
+    setExpandedJobId(prev => (prev === jobId ? null : jobId));
+  };
 
   if (!user) {
     return (
@@ -1000,9 +1037,20 @@ function AccountPage({ user }) {
   if (!accountData) return <div className="form-page"><p>Unable to load account details.</p></div>;
 
   const { jobs } = accountData;
-  const currentJobs = jobs.filter(job => job.status === 'assigned');
-  const openJobs = jobs.filter(job => job.status === 'open');
-  const completedJobs = jobs.filter(job => job.status === 'completed');
+  const tabs = user.user_type === 'client'
+    ? [
+        { key: 'open', label: 'Open Jobs' },
+        { key: 'assigned', label: 'Assigned' },
+        { key: 'pending_completion', label: 'Pending Confirmation' },
+        { key: 'completed', label: 'Completed' }
+      ]
+    : [
+        { key: 'assigned', label: 'In Progress' },
+        { key: 'pending_completion', label: 'Awaiting Approval' },
+        { key: 'completed', label: 'Completed' }
+      ];
+
+  const filteredJobs = jobs.filter(job => job.status === activeTab);
 
   return (
     <div className="account-page">
@@ -1013,74 +1061,76 @@ function AccountPage({ user }) {
         <p><strong>Total jobs/reservations:</strong> {jobs.length}</p>
       </div>
 
-      {user.user_type === 'client' ? (
-        <div className="account-section">
-          <h3>My Posted Jobs</h3>
-          {jobs.length === 0 ? (
-            <div className="empty-state">
-              <p>You have not posted any jobs yet.</p>
-              <p><small>Post a job to start receiving proposals.</small></p>
-            </div>
-          ) : (
-            jobs.map(job => (
-              <div key={job.id} className="account-card">
-                <div className="account-card-header">
-                  <span className="job-title">{job.title}</span>
-                  <span className={`status-tag status-${job.status}`}>{job.status}</span>
-                </div>
-                <p>{job.description}</p>
-                <p><strong>Budget:</strong> ${job.budget_amount} / {job.budget_type}</p>
-                <p><strong>Category:</strong> {job.category?.name || 'N/A'}</p>
-                {job.assigned_freelancer && (
-                  <p><strong>Reserved by:</strong> @{job.assigned_freelancer.username}</p>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="account-section">
-          <h3>My Reservations</h3>
-          {jobs.length === 0 ? (
-            <div className="empty-state">
-              <p>You have not been assigned any jobs yet.</p>
-              <p><small>Accept proposals or wait for job assignments.</small></p>
-            </div>
-          ) : (
-            jobs.map(job => (
-              <div key={job.id} className="account-card">
-                <div className="account-card-header">
-                  <span className="job-title">{job.title}</span>
-                  <span className={`status-tag status-${job.status}`}>{job.status}</span>
-                </div>
-                <p>{job.description}</p>
-                <p><strong>Budget:</strong> ${job.budget_amount} / {job.budget_type}</p>
-                <p><strong>Customer:</strong> @{job.client.username}</p>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      <div className="account-tabs">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            className={`account-tab ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       <div className="account-section">
-        <h3>History</h3>
-        {completedJobs.length === 0 ? (
+        {filteredJobs.length === 0 ? (
           <div className="empty-state">
-            <p>No completed jobs yet.</p>
-            <p><small>Complete an assigned job to see it here.</small></p>
+            <p>No jobs in this tab yet.</p>
+            <p><small>Select another tab or return to the job list to start work.</small></p>
           </div>
         ) : (
-          completedJobs.map(job => (
-            <div key={job.id} className="account-card">
+          filteredJobs.map(job => (
+            <div
+              key={job.id}
+              className={`account-card ${expandedJobId === job.id ? 'expanded' : ''}`}
+              onClick={() => toggleJobDetails(job.id)}
+            >
               <div className="account-card-header">
-                <span className="job-title">{job.title}</span>
-                <span className="status-tag status-completed">completed</span>
+                <div>
+                  <span className="job-title">{job.title}</span>
+                  <div className="account-card-meta">
+                    <span className={`status-tag status-${job.status}`}>{job.status.replace('_', ' ')}</span>
+                    <span className="account-card-small">Budget: ${job.budget_amount} / {job.budget_type}</span>
+                  </div>
+                </div>
+                <span className="account-card-toggle">{expandedJobId === job.id ? '▲' : '▼'}</span>
               </div>
-              <p>{job.description}</p>
-              {user.user_type === 'client' ? (
-                <p><strong>Completed by:</strong> @{job.assigned_freelancer?.username || 'N/A'}</p>
-              ) : (
-                <p><strong>Customer:</strong> @{job.client.username}</p>
+
+              {expandedJobId === job.id && (
+                <div className="account-card-details">
+                  <p>{job.description}</p>
+                  <p><strong>Category:</strong> {job.category?.name || 'N/A'}</p>
+                  {user.user_type === 'client' ? (
+                    <p><strong>Contractor:</strong> {job.assigned_freelancer ? `@${job.assigned_freelancer.username}` : 'Not assigned yet'}</p>
+                  ) : (
+                    <p><strong>Customer:</strong> @{job.client.username}</p>
+                  )}
+
+                  {user.user_type === 'client' && job.status === 'assigned' && (
+                    <button
+                      className="action-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRequestCompletion(job.id);
+                      }}
+                    >
+                      Mark as Done
+                    </button>
+                  )}
+
+                  {user.user_type === 'freelancer' && job.status === 'pending_completion' && (
+                    <button
+                      className="action-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConfirmCompletion(job.id);
+                      }}
+                    >
+                      Confirm Completion
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))

@@ -572,6 +572,46 @@ def accept_proposal(proposal_id):
     return jsonify({'message': 'Proposal accepted'}), 200
 
 
+@app.route('/api/jobs/<int:job_id>/request-completion', methods=['POST'])
+def request_job_completion(job_id):
+    """Client requests completion for an assigned job."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    job = Job.query.get_or_404(job_id)
+    if job.client_id != user.id:
+        return jsonify({'error': 'Not authorized'}), 403
+
+    if job.status != 'assigned':
+        return jsonify({'error': 'Only assigned jobs can be marked as done'}), 400
+
+    job.status = 'pending_completion'
+    db.session.commit()
+
+    return jsonify({'message': 'Completion requested'}), 200
+
+
+@app.route('/api/jobs/<int:job_id>/confirm-completion', methods=['POST'])
+def confirm_job_completion(job_id):
+    """Freelancer confirms a job is completed after client requests it."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    job = Job.query.get_or_404(job_id)
+    if job.assigned_freelancer_id != user.id:
+        return jsonify({'error': 'Not authorized'}), 403
+
+    if job.status != 'pending_completion':
+        return jsonify({'error': 'Only jobs pending completion can be confirmed'}), 400
+
+    job.status = 'completed'
+    db.session.commit()
+
+    return jsonify({'message': 'Job completed successfully'}), 200
+
+
 # --- REVIEW ROUTES ---
 
 # REVIEW routes are defined below with full validation and authorization checks.
