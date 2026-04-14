@@ -572,6 +572,9 @@ def accept_proposal(proposal_id):
     return jsonify({'message': 'Proposal accepted'}), 200
 
 
+
+
+
 @app.route('/api/jobs/<int:job_id>/request-completion', methods=['POST'])
 def request_job_completion(job_id):
     """Client requests completion for an assigned job."""
@@ -610,7 +613,6 @@ def confirm_job_completion(job_id):
     db.session.commit()
 
     return jsonify({'message': 'Job completed successfully'}), 200
-
 
 # --- REVIEW ROUTES ---
 

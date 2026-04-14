@@ -985,9 +985,7 @@ function AccountPage({ user }) {
     api.get('/my-jobs').then(data => {
       setAccountData(data);
       setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -995,48 +993,32 @@ function AccountPage({ user }) {
     loadAccount();
   }, [user]);
 
-  const refreshAccount = () => {
-    loadAccount();
-  };
-
   const handleRequestCompletion = async (jobId) => {
     if (!window.confirm('Mark this job as done and request confirmation from the contractor?')) return;
     const result = await api.post(`/jobs/${jobId}/request-completion`, {});
-    if (result.error) {
-      alert(result.error || 'Unable to request completion.');
-      return;
-    }
+    if (result.error) { alert(result.error); return; }
     alert('Completion requested. Contractor can now confirm the job.');
-    refreshAccount();
+    loadAccount();
   };
 
   const handleConfirmCompletion = async (jobId) => {
     if (!window.confirm('Confirm this job is completed?')) return;
     const result = await api.post(`/jobs/${jobId}/confirm-completion`, {});
-    if (result.error) {
-      alert(result.error || 'Unable to confirm completion.');
-      return;
-    }
+    if (result.error) { alert(result.error); return; }
     alert('Job marked as completed.');
-    refreshAccount();
+    loadAccount();
   };
 
   const toggleJobDetails = (jobId) => {
     setExpandedJobId(prev => (prev === jobId ? null : jobId));
   };
 
-  if (!user) {
-    return (
-      <div className="form-page">
-        <p>Please log in to view your account.</p>
-      </div>
-    );
-  }
-
-  if (loading) return <div className="form-page"><p>Loading account...</p></div>;
+  if (!user) return <div className="form-page"><p>Please log in.</p></div>;
+  if (loading) return <div className="form-page"><p>Loading...</p></div>;
   if (!accountData) return <div className="form-page"><p>Unable to load account details.</p></div>;
 
   const { jobs } = accountData;
+
   const tabs = user.user_type === 'client'
     ? [
         { key: 'open', label: 'Open Jobs' },
@@ -1054,11 +1036,12 @@ function AccountPage({ user }) {
 
   return (
     <div className="account-page">
-      <h2>👤 My Account</h2>
-      <div className="account-summary">
-        <p><strong>Username:</strong> @{user.username}</p>
-        <p><strong>Type:</strong> {user.user_type === 'client' ? 'Client' : 'Freelancer'}</p>
-        <p><strong>Total jobs/reservations:</strong> {jobs.length}</p>
+      <h2>My Account</h2>
+      <div className="account-section">
+        <p><strong>Username:</strong> {user.username}</p>
+        <p><strong>Email:</strong> {user.email}</p>
+        <p><strong>Role:</strong> {user.user_type}</p>
+        <p><strong>Total jobs:</strong> {jobs.length}</p>
       </div>
 
       <div className="account-tabs">
@@ -1077,7 +1060,6 @@ function AccountPage({ user }) {
         {filteredJobs.length === 0 ? (
           <div className="empty-state">
             <p>No jobs in this tab yet.</p>
-            <p><small>Select another tab or return to the job list to start work.</small></p>
           </div>
         ) : (
           filteredJobs.map(job => (
@@ -1108,25 +1090,13 @@ function AccountPage({ user }) {
                   )}
 
                   {user.user_type === 'client' && job.status === 'assigned' && (
-                    <button
-                      className="action-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRequestCompletion(job.id);
-                      }}
-                    >
+                    <button className="action-btn" onClick={e => { e.stopPropagation(); handleRequestCompletion(job.id); }}>
                       Mark as Done
                     </button>
                   )}
 
                   {user.user_type === 'freelancer' && job.status === 'pending_completion' && (
-                    <button
-                      className="action-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfirmCompletion(job.id);
-                      }}
-                    >
+                    <button className="action-btn" onClick={e => { e.stopPropagation(); handleConfirmCompletion(job.id); }}>
                       Confirm Completion
                     </button>
                   )}
