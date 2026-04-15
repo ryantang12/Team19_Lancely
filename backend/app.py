@@ -44,6 +44,7 @@ app = Flask(
 app.config['SECRET_KEY'] = 'your-secret-key-here'  # Change this!
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///lancely.db'  # Database file
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['ADMIN_SECRET'] = 'lancely-admin-2024'  # Change this to something private!
 
 # Enable CORS (so React can talk to Flask)
 CORS(app)
@@ -177,6 +178,25 @@ class Message(db.Model):
     # These let us do message.sender.username without extra queries
     sender = db.relationship('User', foreign_keys=[sender_id])
     receiver = db.relationship('User', foreign_keys=[receiver_id])
+
+
+# ============================================================================
+# SUPPORT TICKET MODEL
+# ============================================================================
+
+class SupportTicket(db.Model):
+    """Support requests sent by users (clients/freelancers) to admin"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='open')  # 'open' or 'resolved'
+    admin_reply = db.Column(db.Text, nullable=True)     # filled in when admin responds
+    replied_at = db.Column(db.DateTime, nullable=True)  # timestamp of the reply
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Lets us do ticket.user.username without extra queries
+    user = db.relationship('User', foreign_keys=[user_id])
 
 
 # ============================================================================
@@ -1044,6 +1064,174 @@ def get_conversations():
 
 
 # ============================================================================
+# SUPPORT TICKET ROUTES
+# ============================================================================
+
+@app.route('/api/support', methods=['POST'])
+def submit_support_ticket():
+    """
+    User submits a support ticket - SAVES TO DATABASE
+    Any logged-in client or freelancer can use this.
+    Body: { subject, message }
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    # Admins don't need to contact themselves
+    if user.user_type == 'admin':
+        return jsonify({'error': 'Admins cannot submit support tickets'}), 403
+
+    data = request.json
+
+    if not data.get('subject', '').strip():
+        return jsonify({'error': 'Subject is required'}), 400
+    if not data.get('message', '').strip():
+        return jsonify({'error': 'Message is required'}), 400
+
+    ticket = SupportTicket(
+        user_id=user.id,
+        subject=data['subject'].strip(),
+        message=data['message'].strip()
+    )
+    db.session.add(ticket)
+    db.session.commit()
+
+    return jsonify({'message': 'Support ticket submitted successfully', 'id': ticket.id}), 201
+
+
+@app.route('/api/support', methods=['GET'])
+def get_my_tickets():
+    """
+    Get all support tickets submitted by the logged-in user.
+    Used by SupportPage so users can see their ticket history and admin replies.
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    tickets = SupportTicket.query.filter_by(user_id=user.id) \
+        .order_by(SupportTicket.created_at.desc()).all()
+
+    return jsonify({
+        'tickets': [{
+            'id': t.id,
+            'subject': t.subject,
+            'message': t.message,
+            'status': t.status,
+            'admin_reply': t.admin_reply,
+            'replied_at': t.replied_at.isoformat() if t.replied_at else None,
+            'created_at': t.created_at.isoformat()
+        } for t in tickets]
+    }), 200
+
+
+@app.route('/api/admin/tickets', methods=['GET'])
+def admin_get_all_tickets():
+    """
+    Admin only: view ALL support tickets from all users.
+    Returns tickets with full user info so admin knows who to help.
+    """
+    user = get_current_user()
+    if not user or user.user_type != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
+
+    tickets = SupportTicket.query.order_by(SupportTicket.created_at.desc()).all()
+
+    return jsonify({
+        'tickets': [{
+            'id': t.id,
+            'subject': t.subject,
+            'message': t.message,
+            'status': t.status,
+            'admin_reply': t.admin_reply,
+            'replied_at': t.replied_at.isoformat() if t.replied_at else None,
+            'created_at': t.created_at.isoformat(),
+            'user': {
+                'id': t.user.id,
+                'username': t.user.username,
+                'email': t.user.email,
+                'user_type': t.user.user_type
+            }
+        } for t in tickets]
+    }), 200
+
+
+@app.route('/api/admin/tickets/<int:ticket_id>/reply', methods=['POST'])
+def admin_reply_to_ticket(ticket_id):
+    """
+    Admin only: reply to a specific support ticket.
+    Marks the ticket as 'resolved' and saves the admin's reply.
+    Body: { reply }
+    """
+    user = get_current_user()
+    if not user or user.user_type != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
+
+    ticket = SupportTicket.query.get_or_404(ticket_id)
+    data = request.json
+
+    if not data.get('reply', '').strip():
+        return jsonify({'error': 'Reply cannot be empty'}), 400
+
+    ticket.admin_reply = data['reply'].strip()
+    ticket.replied_at = datetime.utcnow()
+    ticket.status = 'resolved'
+    db.session.commit()
+
+    return jsonify({'message': 'Reply sent and ticket resolved'}), 200
+
+
+# ============================================================================
+# ADMIN ACCOUNT CREATION
+# ============================================================================
+
+@app.route('/api/admin/register', methods=['POST'])
+def admin_register():
+    """
+    Create an admin account - protected by a secret key.
+    This route is NOT shown in the UI to regular users.
+    Run once via curl or Postman to create your admin account.
+    Body: { email, username, password, admin_secret }
+    """
+    data = request.json
+
+    # Verify the secret key matches what's in the config
+    if data.get('admin_secret') != app.config.get('ADMIN_SECRET'):
+        return jsonify({'error': 'Invalid admin secret'}), 403
+
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'error': 'Email already registered'}), 400
+
+    if User.query.filter_by(username=data['username']).first():
+        return jsonify({'error': 'Username already taken'}), 400
+
+    # Create the admin user — same User model, just user_type = 'admin'
+    user = User(
+        email=data['email'],
+        username=data['username'],
+        user_type='admin',
+        first_name=data.get('first_name', 'Admin'),
+        last_name=data.get('last_name', '')
+    )
+    user.set_password(data['password'])
+    db.session.add(user)
+    db.session.commit()
+
+    token = create_token(user.id)
+    return jsonify({
+        'message': 'Admin account created successfully',
+        'token': token,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'user_type': user.user_type
+        }
+    }), 201
+
+
+# ============================================================================
 # STEP 5: INITIALIZE DATABASE & SEED DATA
 # ============================================================================
 
@@ -1105,6 +1293,12 @@ if __name__ == '__main__':
     print("  GET    /api/reviews/user/<id> - get user's reviews")
     print("  GET    /api/reviews/job/<id>  - get job's reviews")
     print("  GET    /api/reviews/pending   - pending reviews to write")
+    print("Support endpoints:")
+    print("  POST   /api/support                      - submit ticket")
+    print("  GET    /api/support                      - my tickets")
+    print("  GET    /api/admin/tickets                - admin: all tickets")
+    print("  POST   /api/admin/tickets/<id>/reply     - admin: reply")
+    print("  POST   /api/admin/register               - create admin account")
     print("=" * 60)
 
     # Run Flask app

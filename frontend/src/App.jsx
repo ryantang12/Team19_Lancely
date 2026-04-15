@@ -109,6 +109,9 @@ function App() {
   // ────────────────────────────────────────────────────────────────
   
   const showReviews = () => setView('reviews');
+  const showSupport = () => setView('support');
+  const showAdmin = () => setView('admin');
+  const showAdminRegister = () => setView('adminRegister');
   const showUserProfile = (userId) => {
     setSelectedJob({ userId }); // Reuse selectedJob to store userId
     setView('userProfile');
@@ -146,6 +149,17 @@ function App() {
                 )}
               </button>
               <button onClick={showReviews}>⭐ Reviews</button>
+
+              {/* Support button — visible to clients and freelancers only */}
+              {user.user_type !== 'admin' && (
+                <button onClick={showSupport}>🆘 Support</button>
+              )}
+
+              {/* Admin Panel button — only visible to admin accounts */}
+              {user.user_type === 'admin' && (
+                <button onClick={showAdmin}>🛡️ Admin Panel</button>
+              )}
+
               <button onClick={showAccount}>👤 Account</button>
 
               {user.user_type === 'client' && (
@@ -166,7 +180,8 @@ function App() {
       <div className="container">
         {view === 'home' && <HomePage showJobs={showJobs} showRegister={showRegister} />}
         {view === 'register' && <RegisterPage setUser={setUser} setView={setView} />}
-        {view === 'login' && <LoginPage setUser={setUser} setView={setView} />}
+        {view === 'login' && <LoginPage setUser={setUser} setView={setView} showAdminRegister={showAdminRegister} />}
+        {view === 'adminRegister' && <AdminRegisterPage setUser={setUser} setView={setView} />}
         {view === 'jobs' && <JobsPage jobs={jobs} showJobDetail={showJobDetail} />}
         {view === 'jobForm' && <JobFormPage categories={categories} setView={setView} loadJobs={loadJobs} />}
         {view === 'jobDetail' && (
@@ -198,6 +213,10 @@ function App() {
         {view === 'userProfile' && selectedJob?.userId && (
           <UserProfilePage userId={selectedJob.userId} currentUser={user} />
         )}
+        {/* Support ticket page — for clients and freelancers */}
+        {view === 'support' && <SupportPage user={user} />}
+        {/* Admin panel — for admin accounts only */}
+        {view === 'admin' && <AdminPage user={user} />}
         {/* ─────────────── */}
       </div>
     </div>
@@ -318,7 +337,7 @@ function RegisterPage({ setUser, setView }) {
 // LOGIN PAGE
 // ============================================================================
 
-function LoginPage({ setUser, setView }) {
+function LoginPage({ setUser, setView, showAdminRegister }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -360,6 +379,11 @@ function LoginPage({ setUser, setView }) {
         />
         <button type="submit">Login</button>
       </form>
+
+      {/* Hidden admin registration link at the bottom of the login page */}
+      <div className="admin-register-link">
+        <span onClick={showAdminRegister}>Admin? Register here</span>
+      </div>
     </div>
   );
 }
@@ -1429,4 +1453,351 @@ function UserProfilePage({ userId, currentUser }) {
     </div>
   );
 }
+// ============================================================================
+// ADMIN REGISTER PAGE — protected by secret key, linked from Login page
+// ============================================================================
+
+function AdminRegisterPage({ setUser, setView }) {
+  const [formData, setFormData] = useState({
+    email: '',
+    username: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    admin_secret: ''
+  });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!formData.email || !formData.username || !formData.password || !formData.admin_secret) {
+      setError('All fields are required.');
+      return;
+    }
+
+    setSubmitting(true);
+    const result = await api.post('/admin/register', formData);
+    setSubmitting(false);
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      // Log in automatically after successful registration
+      localStorage.setItem('token', result.token);
+      setUser(result.user);
+      setView('admin');  // Go straight to the admin panel
+    }
+  };
+
+  return (
+    <div className="form-page">
+      <h2>🛡️ Admin Account Registration</h2>
+      <p className="admin-register-notice">
+        This page is for authorized administrators only. You must have the admin secret key to create an account.
+      </p>
+
+      {error && <div className="error">{error}</div>}
+
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          name="first_name"
+          placeholder="First Name"
+          value={formData.first_name}
+          onChange={handleChange}
+        />
+        <input
+          type="text"
+          name="last_name"
+          placeholder="Last Name"
+          value={formData.last_name}
+          onChange={handleChange}
+        />
+        <input
+          type="text"
+          name="username"
+          placeholder="Username"
+          value={formData.username}
+          onChange={handleChange}
+          required
+        />
+        <input
+          type="email"
+          name="email"
+          placeholder="Email"
+          value={formData.email}
+          onChange={handleChange}
+          required
+        />
+        <input
+          type="password"
+          name="password"
+          placeholder="Password"
+          value={formData.password}
+          onChange={handleChange}
+          required
+        />
+        {/* The admin secret key field — only someone with the key can register */}
+        <input
+          type="password"
+          name="admin_secret"
+          placeholder="Admin Secret Key"
+          value={formData.admin_secret}
+          onChange={handleChange}
+          required
+        />
+
+        <button type="submit" disabled={submitting}>
+          {submitting ? 'Creating Account...' : 'Create Admin Account'}
+        </button>
+        <button type="button" onClick={() => setView('login')}>
+          Back to Login
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// SUPPORT PAGE — for clients and freelancers to contact admin
+// ============================================================================
+
+function SupportPage({ user }) {
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [tickets, setTickets] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Load this user's past tickets when the page opens
+  useEffect(() => {
+    api.get('/support').then(data => {
+      setTickets(data.tickets || []);
+    }).catch(() => {});
+  }, []);
+
+  const handleSubmit = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!subject.trim() || !message.trim()) {
+      setErrorMsg('Please fill in both subject and message.');
+      return;
+    }
+
+    setSubmitting(true);
+    const result = await api.post('/support', { subject, message });
+    setSubmitting(false);
+
+    if (result.error) {
+      setErrorMsg(result.error);
+    } else {
+      setSuccessMsg('✅ Your support request has been sent! Admin will reply soon.');
+      setSubject('');
+      setMessage('');
+      // Refresh ticket list to show the new ticket
+      api.get('/support').then(data => setTickets(data.tickets || []));
+    }
+  };
+
+  if (!user) return <div className="form-page"><p>Please log in to contact support.</p></div>;
+
+  return (
+    <div className="support-page">
+      <h2>🆘 Contact Support</h2>
+      <p>Having an issue? Fill out the form below and an admin will get back to you.</p>
+
+      {/* SUBMIT FORM */}
+      <div className="support-form">
+        <h3>Submit a Request</h3>
+
+        {successMsg && <div className="support-success">{successMsg}</div>}
+        {errorMsg && <div className="error">{errorMsg}</div>}
+
+        <label>Subject</label>
+        <input
+          type="text"
+          placeholder="e.g. Problem with a payment, Account issue..."
+          value={subject}
+          onChange={e => setSubject(e.target.value)}
+        />
+
+        <label>Message</label>
+        <textarea
+          placeholder="Describe your issue in detail so we can help..."
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          rows={5}
+        />
+
+        <button onClick={handleSubmit} disabled={submitting}>
+          {submitting ? 'Sending...' : 'Send to Admin'}
+        </button>
+      </div>
+
+      {/* PAST TICKETS — shows admin replies when they arrive */}
+      {tickets.length > 0 && (
+        <div className="support-history">
+          <h3>Your Past Requests</h3>
+          {tickets.map(t => (
+            <div key={t.id} className={`ticket-card ticket-${t.status}`}>
+              <div className="ticket-card-header">
+                <strong>{t.subject}</strong>
+                <span className={`ticket-status-badge ${t.status}`}>
+                  {t.status === 'open' ? '🟡 Open' : '✅ Resolved'}
+                </span>
+              </div>
+              <p className="ticket-message">{t.message}</p>
+              <small>{new Date(t.created_at).toLocaleDateString()}</small>
+
+              {/* Show admin's reply if one exists */}
+              {t.admin_reply && (
+                <div className="admin-reply-display">
+                  <strong>Admin Reply:</strong>
+                  <p>{t.admin_reply}</p>
+                  <small>Replied {new Date(t.replied_at).toLocaleDateString()}</small>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// ADMIN PAGE — for admin accounts only
+// ============================================================================
+
+function AdminPage({ user }) {
+  const [tickets, setTickets] = useState([]);
+  const [replyText, setReplyText] = useState({});  // { ticketId: 'reply string' }
+  const [filter, setFilter] = useState('open');    // 'open', 'resolved', 'all'
+  const [loading, setLoading] = useState(true);
+
+  // Block non-admins from seeing this page even if they navigate here directly
+  if (!user || user.user_type !== 'admin') {
+    return <div className="form-page"><p>⛔ You do not have admin access.</p></div>;
+  }
+
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  const loadTickets = async () => {
+    setLoading(true);
+    const data = await api.get('/admin/tickets');
+    setTickets(data.tickets || []);
+    setLoading(false);
+  };
+
+  const handleReply = async (ticketId) => {
+    const reply = replyText[ticketId];
+    if (!reply?.trim()) return;
+
+    const result = await api.post(`/admin/tickets/${ticketId}/reply`, { reply });
+    if (result.error) {
+      alert(result.error);
+    } else {
+      // Clear the reply box for this ticket and refresh the list
+      setReplyText(prev => ({ ...prev, [ticketId]: '' }));
+      loadTickets();
+    }
+  };
+
+  // Filter tickets based on the selected tab
+  const filtered = tickets.filter(t =>
+    filter === 'all' ? true : t.status === filter
+  );
+
+  return (
+    <div className="admin-page">
+      <h2>🛡️ Admin Panel — Support Tickets</h2>
+      <p>{tickets.length} total ticket{tickets.length !== 1 ? 's' : ''}</p>
+
+      {/* FILTER TABS */}
+      <div className="admin-filter-bar">
+        {['open', 'resolved', 'all'].map(f => (
+          <button
+            key={f}
+            className={`admin-filter-btn ${filter === f ? 'active' : ''}`}
+            onClick={() => setFilter(f)}
+          >
+            {f.charAt(0).toUpperCase() + f.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p>Loading tickets...</p>}
+
+      {!loading && filtered.length === 0 && (
+        <div className="empty-state">
+          <p>No {filter === 'all' ? '' : filter} tickets.</p>
+        </div>
+      )}
+
+      {/* TICKET LIST */}
+      {filtered.map(ticket => (
+        <div key={ticket.id} className={`admin-ticket-card ticket-${ticket.status}`}>
+
+          {/* Ticket header: subject + who sent it + status badge */}
+          <div className="admin-ticket-header">
+            <div>
+              <strong className="admin-ticket-subject">{ticket.subject}</strong>
+              <span className="admin-ticket-meta">
+                from <em>@{ticket.user.username}</em> ({ticket.user.email}) —{' '}
+                <span className="user-type-tag">{ticket.user.user_type}</span>
+              </span>
+            </div>
+            <span className={`ticket-status-badge ${ticket.status}`}>
+              {ticket.status === 'open' ? '🟡 Open' : '✅ Resolved'}
+            </span>
+          </div>
+
+          {/* The user's message */}
+          <p className="admin-ticket-body">{ticket.message}</p>
+          <small>Submitted {new Date(ticket.created_at).toLocaleString()}</small>
+
+          {/* Show existing reply if already resolved */}
+          {ticket.admin_reply && (
+            <div className="admin-reply-display">
+              <strong>Your reply:</strong>
+              <p>{ticket.admin_reply}</p>
+              <small>Sent {new Date(ticket.replied_at).toLocaleString()}</small>
+            </div>
+          )}
+
+          {/* Reply box — only shown for open tickets */}
+          {ticket.status === 'open' && (
+            <div className="admin-reply-form">
+              <label>Reply to this user:</label>
+              <textarea
+                placeholder="Type your response to help resolve this issue..."
+                value={replyText[ticket.id] || ''}
+                onChange={e => setReplyText(prev => ({ ...prev, [ticket.id]: e.target.value }))}
+                rows={3}
+              />
+              <button
+                onClick={() => handleReply(ticket.id)}
+                disabled={!replyText[ticket.id]?.trim()}
+              >
+                Send Reply &amp; Mark Resolved
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default App;
