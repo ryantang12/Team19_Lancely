@@ -1,10 +1,5 @@
-# ============================================================================
-# FILE: backend/app.py
-# LANCELY - Simple Flask Backend  (with Chat Feature)
-# ============================================================================
 """
-LANCELY - Simple Flask Backend
-Everything in ONE file for easy understanding!
+LANCELY 
 
 RUN: python3 app.py
 API runs on: http://localhost:5001
@@ -15,11 +10,9 @@ WHAT THIS DOES:
 - Job browsing
 - Proposals
 - Reviews
-- CHAT between clients and contractors   <-- NEW
+- CHAT between clients and contractors 
 - Everything stored in SQLite database
 
-NO complex structure, NO blueprints, NO migrations
-Just simple Python you can understand!
 """
 
 from flask import Flask, request, jsonify
@@ -30,9 +23,9 @@ from datetime import datetime, timedelta
 import jwt
 import os
 
-# ============================================================================
-# STEP 1: CREATE FLASK APP
-# ============================================================================
+
+#CREATE FLASK APP
+
 
 app = Flask(
     __name__,
@@ -53,9 +46,9 @@ CORS(app)
 db = SQLAlchemy(app)
 
 
-# ============================================================================
-# STEP 2: DEFINE DATABASE MODELS (Tables)
-# ============================================================================
+
+#DEFINE DATABASE MODELS (Tables)
+
 
 class User(db.Model):
     """User accounts - stores registered users"""
@@ -109,7 +102,7 @@ class Job(db.Model):
     is_urgent = db.Column(db.Boolean, default=False)
     views_count = db.Column(db.Integer, default=0)
 
-    # NEW: Track which freelancer was hired so chat knows who to message
+    #Track which freelancer was hired so chat knows who to message
     assigned_freelancer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -155,9 +148,9 @@ class Review(db.Model):
     reviewee = db.relationship('User', foreign_keys=[reviewee_id])
     job = db.relationship('Job', foreign_keys=[job_id])
 
-# ============================================================================
-# NEW: MESSAGE MODEL
-# ============================================================================
+
+#MESSAGE MODEL
+
 
 class Message(db.Model):
     """
@@ -180,9 +173,8 @@ class Message(db.Model):
     receiver = db.relationship('User', foreign_keys=[receiver_id])
 
 
-# ============================================================================
 # SUPPORT TICKET MODEL
-# ============================================================================
+
 
 class SupportTicket(db.Model):
     """Support requests sent by users (clients/freelancers) to admin"""
@@ -199,9 +191,9 @@ class SupportTicket(db.Model):
     user = db.relationship('User', foreign_keys=[user_id])
 
 
-# ============================================================================
+
 # STEP 3: HELPER FUNCTIONS
-# ============================================================================
+
 
 def create_token(user_id):
     """Create JWT token for authentication"""
@@ -233,11 +225,11 @@ def get_current_user():
     return User.query.get(user_id)
 
 
-# ============================================================================
-# STEP 4: API ROUTES (Endpoints)
-# ============================================================================
 
-# --- AUTHENTICATION ROUTES ---
+# STEP 4: API ROUTES (Endpoints)
+
+
+#  AUTHENTICATION ROUTES 
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -322,7 +314,7 @@ def get_me():
     }), 200
 
 
-# --- JOB ROUTES ---
+# JOB ROUTES 
 
 @app.route('/api/jobs', methods=['POST'])
 def create_job():
@@ -508,7 +500,7 @@ def get_my_jobs():
     }), 200
 
 
-# --- PROPOSAL ROUTES ---
+# PROPOSAL ROUTES
 
 @app.route('/api/proposals', methods=['POST'])
 def submit_proposal():
@@ -632,13 +624,13 @@ def confirm_job_completion(job_id):
     return jsonify({'message': 'Job completed successfully'}), 200
 
 
-# --- REVIEW ROUTES ---
+#  REVIEW ROUTES 
 
 # REVIEW routes are defined below with full validation and authorization checks.
 
-# ============================================================================
-# NEW: CHAT / MESSAGE ROUTES
-# ============================================================================
+
+# CHAT / MESSAGE ROUTES
+
 
 @app.route('/api/messages', methods=['POST'])
 def send_message():
@@ -1063,9 +1055,9 @@ def get_conversations():
     return jsonify({'conversations': conversations}), 200
 
 
-# ============================================================================
+
 # SUPPORT TICKET ROUTES
-# ============================================================================
+
 
 @app.route('/api/support', methods=['POST'])
 def submit_support_ticket():
@@ -1182,9 +1174,9 @@ def admin_reply_to_ticket(ticket_id):
     return jsonify({'message': 'Reply sent and ticket resolved'}), 200
 
 
-# ============================================================================
+
 # ADMIN ACCOUNT CREATION
-# ============================================================================
+
 
 @app.route('/api/admin/register', methods=['POST'])
 def admin_register():
@@ -1231,9 +1223,9 @@ def admin_register():
     }), 201
 
 
-# ============================================================================
+
 # STEP 5: INITIALIZE DATABASE & SEED DATA
-# ============================================================================
+
 
 def init_db():
     """Create database tables and add initial data"""
@@ -1270,9 +1262,9 @@ def serve_react_app(path):
     return app.send_static_file('index.html')
 
 
-# ============================================================================
+
 # STEP 6: RUN THE APP
-# ============================================================================
+
 
 if __name__ == '__main__':
     # Initialize database on first run
