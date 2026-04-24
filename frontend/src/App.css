@@ -1,7 +1,6 @@
-/* ============================================================================
+/* 
    FILE: frontend/src/App.css
-   LANCELY STYLES  (original + Chat Feature styles)
-   ============================================================================ */
+   LANCELY STYLES */
 
 * {
   margin: 0;
@@ -52,7 +51,7 @@ body {
   margin: 0 1rem;
 }
 
-/* ── NEW: Messages button wrapper so the badge can sit on top ── */
+/* ── Messages button wrapper so the badge can sit on top ── */
 .msg-btn {
   position: relative !important;
 }
@@ -419,7 +418,7 @@ body {
   background: #047857;
 }
 
-/* ── NEW: Chat open button on job detail ── */
+/* ── Chat open button on job detail ── */
 .chat-btn {
   background: #2563eb;
   color: white;
@@ -438,9 +437,9 @@ body {
   background: #1d4ed8;
 }
 
-/* ============================================================================
-   NEW: MESSAGES PAGE (conversation list)
-   ============================================================================ */
+/* 
+   MESSAGES PAGE (conversation list)
+   */
 
 .messages-page {
   max-width: 680px;
@@ -524,9 +523,9 @@ body {
   text-overflow: ellipsis;
 }
 
-/* ============================================================================
-   NEW: CHAT WINDOW
-   ============================================================================ */
+/* 
+   CHAT WINDOW
+  */
 
 .chat-page {
   max-width: 680px;
@@ -540,7 +539,7 @@ body {
   overflow: hidden;
 }
 
-/* --- Chat header --- */
+/* Chat header */
 .chat-header {
   display: flex;
   align-items: center;
@@ -575,7 +574,7 @@ body {
   white-space: nowrap;
 }
 
-/* --- Scrollable messages area --- */
+/* Scrollable messages area */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -597,7 +596,7 @@ body {
   padding: 2rem;
 }
 
-/* --- Date separator --- */
+/* Date separator */
 .date-separator {
   display: flex;
   align-items: center;
@@ -619,7 +618,7 @@ body {
   white-space: nowrap;
 }
 
-/* --- Individual message rows --- */
+/* Individual message rows */
 .message-row {
   display: flex;
   flex-direction: column;
@@ -641,7 +640,7 @@ body {
   padding-left: 0.5rem;
 }
 
-/* --- Bubbles --- */
+/* Bubbles */
 .message-bubble {
   max-width: 70%;
   padding: 0.6rem 0.9rem;
@@ -664,7 +663,7 @@ body {
   border-bottom-left-radius: 4px;
 }
 
-/* --- Timestamp + read receipt --- */
+/* Timestamp + read receipt */
 .msg-time {
   font-size: 0.7rem;
   color: #9ca3af;
@@ -680,7 +679,7 @@ body {
   font-size: 0.7rem;
 }
 
-/* --- Input bar --- */
+/* Input bar */
 .chat-input-area {
   display: flex;
   align-items: flex-end;
@@ -732,9 +731,9 @@ body {
   background: #93c5fd;
   cursor: not-allowed;
 }
-/* ============================================================================
-   NEW: REVIEWS PAGE
-   ============================================================================ */
+/* 
+   REVIEWS PAGE
+   */
 
 .reviews-page {
   max-width: 680px;
@@ -828,9 +827,9 @@ body {
   background: #047857;
 }
 
-/* ============================================================================
+/* 
    REVIEW FORM
-   ============================================================================ */
+   */
 
 .review-form {
   max-width: 600px;
@@ -882,9 +881,9 @@ body {
   border: 2px solid #e5e7eb;
 }
 
-/* ============================================================================
+/* 
    USER PROFILE PAGE
-   ============================================================================ */
+    */
 
 .profile-page {
   max-width: 800px;
@@ -968,9 +967,9 @@ body {
   font-weight: 500;
 }
 
-/* ============================================================================
+/* 
    REVIEWS SECTION
-   ============================================================================ */
+    */
 
 .reviews-section {
   margin-top: 2rem;
@@ -1069,9 +1068,9 @@ body {
   transform: scale(1.02);
 }
 
-/* ============================================================================
+/* 
    SUPPORT PAGE (for clients and freelancers)
-   ============================================================================ */
+ */
 
 .support-page {
   max-width: 700px;
@@ -1199,9 +1198,9 @@ body {
   color: #1e3a8a;
 }
 
-/* ============================================================================
+/* 
    ADMIN PAGE
-   ============================================================================ */
+    */
 
 .admin-page {
   max-width: 800px;
@@ -1322,9 +1321,9 @@ body {
   cursor: not-allowed;
 }
 
-/* ============================================================================
+/* 
    ADMIN REGISTER PAGE
-   ============================================================================ */
+   */
 
 /* Small subtle link at bottom of Login page */
 .admin-register-link {
