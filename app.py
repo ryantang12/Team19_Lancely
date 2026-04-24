@@ -1,7 +1,7 @@
-# ============================================================================
+
 # FILE: backend/app.py
 # LANCELY — Flask Backend (Chat + Reviews + Calendar + Support + Admin)
-# ============================================================================
+
 """
 Run: python3 app.py
 API: http://localhost:5001
@@ -17,9 +17,9 @@ from datetime import datetime, timedelta
 import jwt
 import os
 
-# ============================================================================
+
 # APP SETUP
-# ============================================================================
+
 
 app = Flask(
     __name__,
@@ -36,9 +36,9 @@ CORS(app)
 db = SQLAlchemy(app)
 
 
-# ============================================================================
+
 # MODELS
-# ============================================================================
+
 
 class User(db.Model):
     """Registered users — clients, freelancers, or admins."""
@@ -172,9 +172,9 @@ class SupportTicket(db.Model):
     user = db.relationship('User', foreign_keys=[user_id])
 
 
-# ============================================================================
+
 # AUTH HELPERS
-# ============================================================================
+
 
 def create_token(user_id):
     payload = {'user_id': user_id, 'exp': datetime.utcnow() + timedelta(hours=24)}
@@ -192,9 +192,9 @@ def get_current_user():
     return User.query.get(uid) if uid else None
 
 
-# ============================================================================
+
 # AUTH ROUTES
-# ============================================================================
+
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -243,9 +243,9 @@ def get_me():
     return jsonify({'user': {'id': user.id, 'username': user.username, 'email': user.email, 'user_type': user.user_type}}), 200
 
 
-# ============================================================================
+
 # JOB ROUTES
-# ============================================================================
+
 
 @app.route('/api/jobs', methods=['POST'])
 def create_job():
@@ -332,9 +332,9 @@ def get_my_jobs():
     return jsonify({'user': {'id': user.id, 'username': user.username, 'user_type': user.user_type}, 'jobs': result}), 200
 
 
-# ============================================================================
+
 # PROPOSAL ROUTES
-# ============================================================================
+
 
 @app.route('/api/proposals', methods=['POST'])
 def submit_proposal():
@@ -405,9 +405,9 @@ def confirm_completion(job_id):
     return jsonify({'message': 'Job completed'}), 200
 
 
-# ============================================================================
+
 # MESSAGE / CHAT ROUTES
-# ============================================================================
+
 
 @app.route('/api/messages', methods=['POST'])
 def send_message():
@@ -505,9 +505,9 @@ def get_conversations():
     return jsonify({'conversations': convs}), 200
 
 
-# ============================================================================
+
 # CALENDAR ROUTES — shared events for jobs
-# ============================================================================
+
 
 @app.route('/api/calendar/events', methods=['GET'])
 def get_calendar_events():
@@ -634,9 +634,9 @@ def get_job_events(job_id):
     } for e in events]}), 200
 
 
-# ============================================================================
+
 # REVIEW ROUTES
-# ============================================================================
+
 
 @app.route('/api/reviews', methods=['POST'])
 def create_review():
@@ -732,9 +732,9 @@ def get_job_reviews(job_id):
     } for r in reviews]}), 200
 
 
-# ============================================================================
+
 # SUPPORT ROUTES
-# ============================================================================
+
 
 @app.route('/api/support', methods=['POST'])
 def submit_ticket():
@@ -818,9 +818,9 @@ def admin_register():
     }), 201
 
 
-# ============================================================================
+
 # SERVE REACT
-# ============================================================================
+
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -830,9 +830,9 @@ def serve_react(path):
     return app.send_static_file('index.html')
 
 
-# ============================================================================
+
 # DB INIT & SEED
-# ============================================================================
+
 
 def init_db():
     with app.app_context():
@@ -854,9 +854,9 @@ def init_db():
         print('✅ Database ready')
 
 
-# ============================================================================
+
 # RUN
-# ============================================================================
+
 
 if __name__ == '__main__':
     init_db()
